@@ -1,0 +1,40 @@
+# EdgentRAG backend
+
+This directory is rebuilt component by component. The first component is the
+API application shell and its health endpoint.
+
+Run it locally from the repository root:
+
+~~~bash
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -e "./app/backend[dev]"
+.venv/bin/python -m uvicorn edgentrag.api.app:app --reload
+~~~
+
+Open http://127.0.0.1:8000/docs to inspect the generated API documentation.
+
+Run the quality checks:
+
+~~~bash
+.venv/bin/python -m ruff check app/backend
+.venv/bin/python -m pytest app/backend
+~~~
+
+The editable installation is required. Application code lives in
+backend/src/edgentrag, which deliberately is not on Python's import path by
+default. Installing the project makes the package importable and ensures local
+development behaves like a deployed package.
+
+For a one-off run without installing the project, point Uvicorn at the source
+directory explicitly:
+
+~~~bash
+.venv/bin/python -m uvicorn --app-dir app/backend/src \
+  edgentrag.api.app:app --reload
+~~~
+
+The application uses a src layout: importable application code belongs in
+src/edgentrag, while tests belong in tests. This prevents tests from
+accidentally importing files from the repository root instead of the installed
+package.
