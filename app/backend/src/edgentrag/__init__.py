@@ -1,2 +1,1 @@
 """EdgentRAG backend package."""
-
