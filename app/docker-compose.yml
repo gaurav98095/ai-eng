@@ -1,0 +1,120 @@
+# The whole application, on one machine.
+#
+#   docker compose up -d --build
+#
+# Same deployment as version 1 — one EC2 box, one Cloudflare tunnel, SQLite on
+# local disk. What changed is the code behind it: the API is async and does no
+# slow work, and background jobs go through SQS to separate worker processes.
+#
+# S3 and SQS are real AWS. Both are effectively free at this size (SQS gives a
+# million requests a month, permanently), and using the real thing is the point
+# of the exercise. Credentials come from the instance's IAM role, so there is
+# no key anywhere in this file.
+#
+# The three model services are NOT here -- they run on Colab. Two of the four
+# queues are drained by that GPU, which reaches us through the broker endpoint
+# on the API (see backend/api/routes/broker.py) rather than holding any AWS
+# credential of its own.
+
+name: edgentrag-v2
+
+x-app-env: &app-env
+  ENV: ${ENV:-local}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  # One file, shared by every container through the `appdata` volume. WAL mode
+  # is what makes that safe; see backend/shared/db.py.
+  DATABASE_URL: sqlite:////data/edgentrag.db
+  REDIS_URL: redis://redis:6379/0
+  S3_BUCKET: ${S3_BUCKET:?set S3_BUCKET in .env}
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  INGEST_QUEUE_URL: ${INGEST_QUEUE_URL:?set INGEST_QUEUE_URL in .env}
+  CHAT_QUEUE_URL: ${CHAT_QUEUE_URL:?set CHAT_QUEUE_URL in .env}
+  # The GPU drains these two through the broker; it never sees the URLs.
+  STT_QUEUE_URL: ${STT_QUEUE_URL:?set STT_QUEUE_URL in .env}
+  EMBED_QUEUE_URL: ${EMBED_QUEUE_URL:?set EMBED_QUEUE_URL in .env}
+  # The only credential the GPU holds. Grants "ask for a job" and nothing else.
+  BROKER_TOKEN: ${BROKER_TOKEN:?set BROKER_TOKEN in .env}
+  # Starting addresses only — the real ones are set on the app's first screen
+  # and kept in Redis, because a Colab tunnel is renamed on every restart.
+  EMBEDDING_SERVICE_URL: ${EMBEDDING_SERVICE_URL:-http://localhost:8001}
+  STT_SERVICE_URL: ${STT_SERVICE_URL:-http://localhost:8002}
+  LLM_SERVICE_URL: ${LLM_SERVICE_URL:-http://localhost:8003}
+
+services:
+
+  # The only thing the tunnel talks to. Serves the frontend and forwards /api.
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api: {condition: service_started}
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    environment: *app-env
+    volumes:
+      - appdata:/data
+    depends_on:
+      redis: {condition: service_healthy}
+    # Deliberately no `ports`. Only nginx can reach it, so port 8000 is not
+    # open on the host and needs no security-group rule.
+    restart: unless-stopped
+
+  ingest-worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment: *app-env
+    command: ["python", "-m", "backend.workers.ingest"]
+    volumes:
+      - appdata:/data
+      - hfcache:/home/app/.cache/huggingface   # keep docling's models
+    depends_on:
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+    # Scale this when a backlog builds:
+    #   docker compose up -d --scale ingest-worker=3
+    # SQLite tolerates that because they are all on this machine, in WAL mode.
+
+  chat-worker:
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment: *app-env
+    command: ["python", "-m", "backend.workers.chat"]
+    volumes:
+      - appdata:/data
+    depends_on:
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # No persistence: everything here is a cache or a live stream. The truth is
+    # in SQLite, and losing this costs the model its short-term memory only.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # An https address without owning a domain. Prints its URL to the log:
+  #   docker compose logs cloudflared | grep trycloudflare
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel", "--no-autoupdate", "--url", "http://web:80"]
+    depends_on:
+      web: {condition: service_started}
+    restart: unless-stopped
+
+volumes:
+  appdata:      # the sqlite file — the one thing here worth backing up
+  hfcache:

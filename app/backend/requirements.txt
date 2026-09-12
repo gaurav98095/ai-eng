@@ -1,0 +1,25 @@
+# Shared by the API and both workers. One image would do; the API gets its own
+# so it does not carry Docling's model-loading dependencies.
+
+# --- web ---
+fastapi>=0.115,<0.117
+uvicorn[standard]>=0.30,<0.35
+pydantic>=2.7,<3
+pydantic-settings>=2.3,<3
+python-multipart>=0.0.9
+
+# --- data ---
+SQLAlchemy[asyncio]>=2.0,<2.1
+aiosqlite>=0.20,<0.22        # the API: async sqlite, so the loop never blocks
+redis>=5.0,<6                # conversation window, and pub/sub for streaming
+
+# When this outgrows one machine, add these and change DATABASE_URL. Nothing
+# else in the codebase has to know.
+# asyncpg>=0.29,<0.31
+# psycopg2-binary>=2.9,<3
+
+# --- aws ---
+boto3>=1.34,<2
+
+# --- outbound calls to the model services ---
+requests>=2.31,<3

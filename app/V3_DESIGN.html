@@ -1,0 +1,1467 @@
+<title>EdgentRAG v3 — The Version That Survives</title>
+
+<style>
+  /* ---- tokens: light is the base, both dark states redefine only tokens ---- */
+  :root {
+    --ground:      #FAFAFC;
+    --surface:     #FFFFFF;
+    --surface-2:   #F2F2F7;
+    --ink:         #1A1B2E;
+    --ink-soft:    #4A4B63;
+    --muted:       #6B6C85;
+    --rule:        #E3E2EC;
+    --accent:      #4C36C9;
+    --accent-soft: #EDEAFB;
+    --marker:      rgba(76, 54, 201, 0.18);
+    --rust:        #A8541B;
+    --rust-soft:   #FBF0E6;
+    --green:       #2F7A54;
+    --green-soft:  #E8F4ED;
+
+    --sans:  "Avenir Next", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Source Serif Pro", Georgia, serif;
+    --mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #131320;
+      --surface:     #1B1B2B;
+      --surface-2:   #232336;
+      --ink:         #E9E8F2;
+      --ink-soft:    #C2C1D6;
+      --muted:       #9A9AB4;
+      --rule:        #2E2E45;
+      --accent:      #A897FF;
+      --accent-soft: #262041;
+      --marker:      rgba(168, 151, 255, 0.26);
+      --rust:        #E4A06A;
+      --rust-soft:   #2C2117;
+      --green:       #6DBF95;
+      --green-soft:  #17281F;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #131320;
+    --surface:     #1B1B2B;
+    --surface-2:   #232336;
+    --ink:         #E9E8F2;
+    --ink-soft:    #C2C1D6;
+    --muted:       #9A9AB4;
+    --rule:        #2E2E45;
+    --accent:      #A897FF;
+    --accent-soft: #262041;
+    --marker:      rgba(168, 151, 255, 0.26);
+    --rust:        #E4A06A;
+    --rust-soft:   #2C2117;
+    --green:       #6DBF95;
+    --green-soft:  #17281F;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 56px 24px 96px; }
+  .prose { max-width: 65ch; }
+
+  .masthead { border-bottom: 2px solid var(--ink); padding-bottom: 22px; margin-bottom: 12px; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 14px;
+  }
+
+  h1 {
+    font-family: var(--sans); font-size: clamp(30px, 5.5vw, 44px); line-height: 1.08;
+    letter-spacing: -0.025em; font-weight: 700; margin: 0 0 14px; text-wrap: balance;
+  }
+
+  .lede { font-size: 19px; color: var(--ink-soft); margin: 0; max-width: 58ch; }
+
+  .meta {
+    display: flex; flex-wrap: wrap; gap: 8px 20px; font-family: var(--mono);
+    font-size: 12px; color: var(--muted); margin: 18px 0 52px;
+  }
+
+  section { margin-bottom: 56px; }
+
+  h2 {
+    font-family: var(--sans); font-size: 25px; line-height: 1.2; letter-spacing: -0.018em;
+    font-weight: 700; margin: 0 0 6px; text-wrap: balance;
+  }
+
+  h2 .num {
+    font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--accent);
+    letter-spacing: 0.06em; display: block; margin-bottom: 7px;
+  }
+
+  h3 { font-family: var(--sans); font-size: 16px; font-weight: 700; letter-spacing: -0.005em; margin: 30px 0 8px; }
+  h4 { font-family: var(--sans); font-size: 15px; font-weight: 700; margin: 0 0 4px; }
+
+  p { margin: 0 0 16px; }
+  a { color: var(--accent); }
+
+  .mk {
+    background-image: linear-gradient(to top, var(--marker) 0, var(--marker) 0.62em, transparent 0.62em);
+  }
+
+  code {
+    font-family: var(--mono); font-size: 0.86em; background: var(--surface-2);
+    padding: 1px 5px; border-radius: 4px;
+  }
+
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 0 0 48px; }
+
+  /* ---- step flows ---- */
+  .flow {
+    display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px;
+    margin: 22px 0 10px;
+  }
+  .node {
+    border: 1.5px solid var(--rule); border-radius: 9px; background: var(--surface);
+    padding: 10px 13px; font-family: var(--sans); font-size: 13.5px; font-weight: 600;
+    display: flex; flex-direction: column; justify-content: center; min-width: 0;
+  }
+  .node small { display: block; font-family: var(--mono); font-size: 10.5px; font-weight: 400; color: var(--muted); margin-top: 3px; }
+  .node.hi { border-color: var(--accent); background: var(--accent-soft); }
+  .node.store { border-style: dashed; }
+  .arr { color: var(--accent); align-self: center; font-size: 15px; }
+  .flow-note { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 0 0 16px; }
+
+  /* ---- architecture diagram ---- */
+  .arch {
+    border: 1.5px solid var(--rule); border-radius: 12px; background: var(--surface);
+    padding: 18px; margin: 26px 0 12px; overflow-x: auto;
+  }
+  .arch svg { display: block; min-width: 760px; width: 100%; height: auto; }
+  .arch-note { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 0 0 16px; }
+
+  /* ---- cards ---- */
+  .cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); margin: 22px 0; }
+  .card {
+    border: 1.5px solid var(--rule); border-radius: 10px; background: var(--surface); padding: 15px 16px;
+  }
+  .card h4 { font-family: var(--sans); font-size: 15px; margin: 0 0 3px; }
+  .card .role { font-family: var(--mono); font-size: 10.5px; color: var(--accent); display: block; margin-bottom: 8px; }
+  .card p { font-size: 14.5px; margin: 0; color: var(--ink-soft); }
+
+  /* ---- aws component entries ---- */
+  .aws { border-top: 1px solid var(--rule); padding: 18px 0 4px; }
+  .aws:first-of-type { border-top: 0; }
+  .aws-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+  .aws-head h4 { margin: 0; font-size: 16px; }
+  .aws-head .role { font-family: var(--mono); font-size: 10.5px; color: var(--accent); }
+  .aws p { font-size: 15px; margin: 0 0 10px; color: var(--ink-soft); max-width: 66ch; }
+  .aws .replaces {
+    font-family: var(--mono); font-size: 11.5px; color: var(--muted);
+    border-left: 3px solid var(--rule); padding-left: 11px; margin-bottom: 4px;
+  }
+  .aws .replaces b { color: var(--rust); font-weight: 500; }
+
+  /* ---- callouts ---- */
+  .callout {
+    border-left: 3px solid var(--accent); background: var(--surface-2);
+    padding: 16px 20px; margin: 24px 0; border-radius: 0 9px 9px 0;
+  }
+  .callout .tag {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--accent); display: block; margin-bottom: 7px;
+  }
+  .callout p { font-size: 15.5px; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout h3 { margin-top: 0; }
+
+  /* ---- tables ---- */
+  .table-wrap { overflow-x: auto; margin: 22px 0; }
+  table { border-collapse: collapse; width: 100%; font-family: var(--sans); font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); border-bottom-color: var(--ink); }
+  td.ep { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: var(--accent); }
+  td.who { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  td.was { font-family: var(--mono); font-size: 12px; color: var(--rust); }
+
+  /* ---- limitation map ---- */
+  .limits { display: grid; gap: 12px; margin: 24px 0; }
+  .limit {
+    display: flex; gap: 14px; border: 1.5px solid var(--rule); border-radius: 10px;
+    background: var(--surface); padding: 14px 16px;
+  }
+  .limit .n { font-family: var(--mono); font-size: 12px; color: var(--rust); flex: 0 0 auto; padding-top: 2px; }
+  .limit h4 { font-family: var(--sans); font-size: 15px; margin: 0 0 4px; font-weight: 700; }
+  .limit p { margin: 0; font-size: 14.5px; color: var(--ink-soft); }
+  .limit .fix {
+    font-family: var(--mono); font-size: 11.5px; color: var(--green);
+    display: block; margin-top: 7px;
+  }
+  .limit.open { border-style: dashed; }
+  .limit.open .fix { color: var(--rust); }
+
+  /* ---- phases ---- */
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 22px 0; }
+  ol.steps li {
+    counter-increment: s; position: relative; padding: 0 0 16px 44px; font-size: 15.5px; color: var(--ink-soft);
+  }
+  ol.steps li::before {
+    content: counter(s); position: absolute; left: 0; top: 1px;
+    font-family: var(--mono); font-size: 12px; color: var(--accent);
+    background: var(--accent-soft); border-radius: 6px; width: 28px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  ol.steps strong { font-family: var(--sans); font-size: 15.5px; color: var(--ink); }
+
+  .closing { border-top: 2px solid var(--ink); padding-top: 22px; font-size: 16px; color: var(--ink-soft); }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Advanced AI Engineering · Version 3 · High-Level Design</p>
+    <h1>EdgentRAG v3 — the version that survives</h1>
+    <p class="lede">
+      The same product, rebuilt so that hundreds of people can use it at once and nothing is
+      lost when a machine goes away. One rule drives every decision here.
+    </p>
+    <p class="lede" style="margin-top:1rem">
+      <strong>What this document is.</strong> Version 2 adopts the <em>code</em> half of this
+      design — async endpoints and SQS-backed workers — on version 1's single-machine
+      deployment. Everything below about managed infrastructure (Fargate, RDS, a load balancer)
+      is the step after that, described here so the reason for each piece is on record before
+      it is needed.
+    </p>
+  </header>
+
+  <p class="meta">
+    <span>Queue and workers, not background tasks</span>
+    <span>Nothing runs on one machine</span>
+    <span>Streamed, not polled</span>
+    <span>The AI services are unchanged</span>
+  </p>
+
+  <section>
+    <h2><span class="num">Part 0</span>The one rule</h2>
+    <div class="prose">
+      <p>
+        Version 1 works and is worth having built. Everything that breaks in it traces back to a
+        single decision, and version 2 is mostly the consequence of reversing that decision:
+      </p>
+    </div>
+
+    <div class="callout">
+      <span class="tag">The rule for version 2</span>
+      <p>
+        <span class="mk">The API never does slow work.</span> It validates a request, writes a row,
+        puts a message on a queue, and returns. Anything that takes longer than a few milliseconds
+        happens somewhere else, in a process whose death costs nothing.
+      </p>
+    </div>
+
+    <div class="prose">
+      <p>
+        In version 1, <code>background.add_task</code> runs ingestion and answer generation
+        <em>inside the web server</em>, on the same forty-thread pool that serves ordinary requests.
+        That one fact produces most of Part 7 of the version 1 design: forty concurrent operations
+        freeze the whole API, a deploy mid-upload silently destroys the work, and one person's large
+        upload makes another person's page feel broken.
+      </p>
+      <p>
+        Everything below follows. The queue is not an embellishment; it is the change, and the rest
+        is what a queue makes possible.
+      </p>
+      <p>
+        <strong>What is deliberately out of scope:</strong> the three model services. Assume they
+        are excellent — batched, quantised, warm, and fast. This document is about everything
+        around them.
+      </p>
+    </div>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2><span class="num">Part 1</span>The shape</h2>
+    <div class="prose">
+      <p>
+        Four bands. Traffic enters at the top, slow work falls through the middle into queues, and
+        state lives at the bottom where every process can reach it.
+      </p>
+    </div>
+
+    <div class="arch">
+      <svg viewBox="0 0 860 700" role="img"
+           aria-label="Architecture: browser through CloudFront and an application load balancer to a fleet of stateless API tasks; the API enqueues to two SQS queues which feed separate ingest and chat worker fleets; all of them share RDS Postgres with pgvector, ElastiCache Redis, and S3; the workers call the three model services.">
+        <defs>
+          <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
+          </marker>
+          <marker id="am" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)" />
+          </marker>
+        </defs>
+
+        <!-- band labels -->
+        <text x="8" y="34" font-family="var(--mono)" font-size="10" fill="var(--muted)" letter-spacing="1.5">EDGE</text>
+        <text x="8" y="196" font-family="var(--mono)" font-size="10" fill="var(--muted)" letter-spacing="1.5">COMPUTE</text>
+        <text x="8" y="486" font-family="var(--mono)" font-size="10" fill="var(--muted)" letter-spacing="1.5">STATE</text>
+        <text x="8" y="644" font-family="var(--mono)" font-size="10" fill="var(--muted)" letter-spacing="1.5">GPU</text>
+
+        <!-- browser -->
+        <rect x="330" y="14" width="200" height="40" rx="8" fill="var(--surface-2)" stroke="var(--rule)" stroke-width="1.5"/>
+        <text x="430" y="39" text-anchor="middle" font-family="var(--sans)" font-size="13.5" font-weight="600" fill="var(--ink)">Browser</text>
+
+        <!-- cloudfront + waf -->
+        <rect x="300" y="86" width="260" height="46" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.5"/>
+        <text x="430" y="106" text-anchor="middle" font-family="var(--sans)" font-size="13" font-weight="600" fill="var(--ink)">CloudFront + WAF</text>
+        <text x="430" y="122" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--muted)">TLS · static assets · rate limits</text>
+
+        <!-- alb -->
+        <rect x="345" y="150" width="170" height="40" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.5"/>
+        <text x="430" y="168" text-anchor="middle" font-family="var(--sans)" font-size="13" font-weight="600" fill="var(--ink)">ALB</text>
+        <text x="430" y="182" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--muted)">health checks</text>
+
+        <!-- api fleet -->
+        <rect x="228" y="212" width="404" height="56" rx="9" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.6"/>
+        <text x="430" y="234" text-anchor="middle" font-family="var(--sans)" font-size="14" font-weight="700" fill="var(--ink)">API · ECS Fargate · N tasks · async</text>
+        <text x="430" y="252" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--muted)">validate → write row → enqueue → return. holds SSE connections.</text>
+
+        <!-- queues -->
+        <rect x="150" y="304" width="200" height="44" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="5 3"/>
+        <text x="250" y="322" text-anchor="middle" font-family="var(--sans)" font-size="12.5" font-weight="600" fill="var(--ink)">SQS · ingest</text>
+        <text x="250" y="337" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--muted)">one message per file</text>
+
+        <rect x="510" y="304" width="200" height="44" rx="8" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="5 3"/>
+        <text x="610" y="322" text-anchor="middle" font-family="var(--sans)" font-size="12.5" font-weight="600" fill="var(--ink)">SQS · chat</text>
+        <text x="610" y="337" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--muted)">one message per question</text>
+
+        <!-- workers -->
+        <rect x="150" y="388" width="200" height="52" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.5"/>
+        <text x="250" y="408" text-anchor="middle" font-family="var(--sans)" font-size="12.5" font-weight="600" fill="var(--ink)">Ingest workers</text>
+        <text x="250" y="424" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--muted)">convert · chunk · embed</text>
+
+        <rect x="510" y="388" width="200" height="52" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.5"/>
+        <text x="610" y="408" text-anchor="middle" font-family="var(--sans)" font-size="12.5" font-weight="600" fill="var(--ink)">Chat workers</text>
+        <text x="610" y="424" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--muted)">retrieve · prompt · stream</text>
+
+        <!-- state -->
+        <rect x="40" y="500" width="230" height="52" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.5"/>
+        <text x="155" y="520" text-anchor="middle" font-family="var(--sans)" font-size="12.5" font-weight="600" fill="var(--ink)">RDS Postgres + pgvector</text>
+        <text x="155" y="536" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--muted)">rows and vectors, one store</text>
+
+        <rect x="300" y="500" width="230" height="52" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.5"/>
+        <text x="415" y="520" text-anchor="middle" font-family="var(--sans)" font-size="12.5" font-weight="600" fill="var(--ink)">ElastiCache Redis</text>
+        <text x="415" y="536" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--muted)">window · pub/sub · cache</text>
+
+        <rect x="560" y="500" width="230" height="52" rx="8" fill="var(--surface)" stroke="var(--rule)" stroke-width="1.5"/>
+        <text x="675" y="520" text-anchor="middle" font-family="var(--sans)" font-size="12.5" font-weight="600" fill="var(--ink)">S3</text>
+        <text x="675" y="536" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--muted)">files · presigned both ways</text>
+
+        <!-- model services -->
+        <rect x="270" y="620" width="320" height="46" rx="8" fill="var(--surface-2)" stroke="var(--rule)" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="430" y="640" text-anchor="middle" font-family="var(--sans)" font-size="12.5" font-weight="600" fill="var(--ink)">embedding · stt · llm</text>
+        <text x="430" y="656" text-anchor="middle" font-family="var(--mono)" font-size="10" fill="var(--muted)">stt reached by queue · llm called directly — Part 5</text>
+
+        <!-- arrows: vertical spine -->
+        <line x1="430" y1="54"  x2="430" y2="82"  stroke="var(--accent)" stroke-width="1.6" marker-end="url(#a)"/>
+        <line x1="430" y1="132" x2="430" y2="146" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#a)"/>
+        <line x1="430" y1="190" x2="430" y2="208" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#a)"/>
+
+        <!-- api to queues -->
+        <path d="M 340 268 L 340 288 L 250 288 L 250 300" fill="none" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#a)"/>
+        <path d="M 520 268 L 520 288 L 610 288 L 610 300" fill="none" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#a)"/>
+
+        <!-- queues to workers -->
+        <line x1="250" y1="348" x2="250" y2="384" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#a)"/>
+        <line x1="610" y1="348" x2="610" y2="384" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#a)"/>
+
+        <!-- workers to state -->
+        <path d="M 200 440 L 200 470 L 155 470 L 155 496" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#am)"/>
+        <path d="M 300 440 L 300 470 L 415 470 L 415 496" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#am)"/>
+        <path d="M 660 440 L 660 470 L 675 470 L 675 496" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#am)"/>
+        <path d="M 560 440 L 560 470 L 440 470 L 440 496" fill="none" stroke="var(--muted)" stroke-width="1.3" marker-end="url(#am)"/>
+
+        <!-- api to state (reads) -->
+        <path d="M 260 268 L 100 268 L 100 496" fill="none" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#am)"/>
+        <text x="104" y="380" font-family="var(--mono)" font-size="9.5" fill="var(--muted)">reads</text>
+
+        <!-- workers to model services -->
+        <path d="M 610 440 L 610 600 L 500 600 L 500 616" fill="none" stroke="var(--accent)" stroke-width="1.4" marker-end="url(#a)"/>
+        <path d="M 250 440 L 250 600 L 360 600 L 360 616" fill="none" stroke="var(--accent)" stroke-width="1.4" marker-end="url(#a)"/>
+
+        <!-- browser direct to S3 -->
+        <path d="M 530 34 L 810 34 L 810 496" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#a)"/>
+        <text x="676" y="28" font-family="var(--mono)" font-size="9.5" fill="var(--accent)">presigned PUT — bytes never touch the API</text>
+
+        <!-- S3 event to ingest queue -->
+        <path d="M 560 526 L 40 526 L 40 326 L 146 326" fill="none" stroke="var(--muted)" stroke-width="1.3" stroke-dasharray="4 3" marker-end="url(#am)"/>
+        <text x="46" y="316" font-family="var(--mono)" font-size="9.5" fill="var(--muted)">S3 event</text>
+      </svg>
+    </div>
+    <p class="arch-note">
+      Solid arrows are the request path. Dashed arrows are the things that make it scale: uploads
+      bypassing the API, and S3 telling the queue a file has landed rather than the browser being
+      trusted to say so.
+    </p>
+
+    <div class="prose">
+      <h3>What changed, in one table</h3>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Concern</th><th>Version 1</th><th>Version 2</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Background work</td><td class="was">background.add_task, in the API</td><td>SQS + separate worker fleets</td></tr>
+          <tr><td>Reaching the GPU</td><td class="was">a 15-minute synchronous call</td><td>a queue for transcription; direct calls for embedding and generation</td></tr>
+          <tr><td>Database</td><td class="was">SQLite on one box</td><td>RDS Postgres, via RDS Proxy</td></tr>
+          <tr><td>Vectors</td><td class="was">Chroma beside the GPU</td><td>pgvector, in that same Postgres</td></tr>
+          <tr><td>Conversation window</td><td class="was">a Python dict</td><td>ElastiCache Redis</td></tr>
+          <tr><td>Progress</td><td class="was">poll every 2 seconds</td><td>Server-Sent Events over Redis pub/sub</td></tr>
+          <tr><td>Compute</td><td class="was">one EC2 instance</td><td>ECS Fargate, autoscaled</td></tr>
+          <tr><td>Identity</td><td class="was">none at all</td><td>Cognito, JWT on every request</td></tr>
+          <tr><td>Files</td><td>S3, presigned</td><td>S3, presigned — unchanged</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <span class="tag">What version 1 already got right</span>
+      <p>
+        Four things carry over untouched, and it is worth naming them: <strong>presigned URLs in
+        both directions</strong>, so file bytes never pass through the application;
+        <strong>the storage abstraction</strong>, so nothing but one file knows what S3 is;
+        <strong>settings-driven environments</strong>, so a laptop and a cloud are the same program;
+        and <strong>service calls that carry data rather than file paths</strong> — the lesson
+        version 1 learned painfully when three services moved onto a GPU.
+      </p>
+    </div>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2><span class="num">Part 2</span>Every AWS component, and why it is here</h2>
+    <div class="prose">
+      <p>
+        Each entry says what the service is, why this design uses it, and what it replaces. If a
+        component cannot be justified by a specific version 1 failure or a specific scaling need,
+        it should not be in the diagram.
+      </p>
+      <h3>Edge — what the internet touches</h3>
+    </div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>Amazon CloudFront</h4><span class="role">CDN</span></div>
+      <p>
+        A content delivery network: a few hundred servers around the world that cache your static
+        files and sit in front of your application. It terminates TLS, so certificates are handled
+        in one place, and it serves the React bundle from wherever the user is rather than from
+        one region.
+      </p>
+      <p>
+        It also absorbs the boring traffic. Every page load fetches the same JavaScript; that
+        should never reach your servers.
+      </p>
+      <p class="replaces"><b>Replaces:</b> nginx serving <code>frontend/dist</code>, and a Cloudflare quick tunnel for TLS.</p>
+    </div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>AWS WAF</h4><span class="role">web application firewall</span></div>
+      <p>
+        Rules applied before a request reaches you: rate limits per IP, blocking of known-bad
+        sources, and size caps. Version 1 has no limit on how often anyone may ask a question, and
+        each question costs GPU time — a single script could spend your entire compute budget in an
+        afternoon.
+      </p>
+      <p class="replaces"><b>Replaces:</b> nothing. There was no protection at all.</p>
+    </div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>Application Load Balancer</h4><span class="role">ALB</span></div>
+      <p>
+        Spreads requests across however many API tasks are running, and stops sending traffic to
+        any that fail their health check. It is also what makes deploys invisible: new tasks are
+        registered, old ones drained, no request dropped.
+      </p>
+      <p>
+        It supports long-lived streaming responses, which matters here — the API holds a
+        Server-Sent Events connection open per active chat.
+      </p>
+      <p class="replaces"><b>Replaces:</b> nothing — version 1 had a single process with nowhere to balance to.</p>
+    </div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>Route 53 + AWS Certificate Manager</h4><span class="role">DNS and TLS</span></div>
+      <p>
+        A domain you own, and a certificate that renews itself. This is what ends the version 1
+        situation where the public address changes every time a tunnel restarts and any link you
+        shared stops working.
+      </p>
+      <p class="replaces"><b>Replaces:</b> <code>*.trycloudflare.com</code> addresses that live as long as a process does.</p>
+    </div>
+
+    <div class="prose"><h3>Compute — where code runs</h3></div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>Amazon ECS on AWS Fargate</h4><span class="role">containers, no servers</span></div>
+      <p>
+        Fargate runs containers without you owning the machine underneath. You describe a task —
+        this image, this much CPU and memory — and AWS finds somewhere to run it. There is no
+        instance to patch, no disk to fill, and no <code>ssh</code>.
+      </p>
+      <p>
+        Three separate services run this way, and separating them is the point: the
+        <strong>API</strong>, the <strong>ingest workers</strong>, and the <strong>chat
+        workers</strong>. They fail independently, deploy independently, and scale on different
+        signals.
+      </p>
+      <p>
+        The API must be written with <code>async def</code> handlers rather than version 1's
+        synchronous ones. It will hold hundreds of idle streaming connections, which asyncio does
+        for almost nothing and a thread pool cannot do at all.
+      </p>
+      <p class="replaces"><b>Replaces:</b> one <code>t3.medium</code> running uvicorn under systemd.</p>
+    </div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>Application Auto Scaling</h4><span class="role">target tracking</span></div>
+      <p>
+        Adds and removes tasks to hold a chosen metric steady. The important detail is that the
+        three services scale on <em>different</em> signals:
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Service</th><th>Scales on</th><th>Because</th></tr></thead>
+          <tbody>
+            <tr><td>API</td><td class="who">requests per task</td><td>it is I/O bound and cheap; scale for connections</td></tr>
+            <tr><td>Ingest workers</td><td class="who">queue depth ÷ tasks</td><td>bursty; a backlog is the only real signal</td></tr>
+            <tr><td>Chat workers</td><td class="who">queue depth, aggressively</td><td>a queued question is a person waiting</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="replaces"><b>Replaces:</b> nothing. Version 1's capacity was whatever one box had.</p>
+    </div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>Amazon ECR</h4><span class="role">container registry</span></div>
+      <p>
+        Where the built images live. Every deploy is an image tagged with a commit, which makes a
+        rollback a matter of pointing at the previous tag rather than reversing a change.
+      </p>
+      <p class="replaces"><b>Replaces:</b> <code>rsync</code> of source files onto a running server.</p>
+    </div>
+
+    <div class="prose"><h3>Messaging — the change that matters</h3></div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>Amazon SQS</h4><span class="role">queues, plus dead-letter queues</span></div>
+      <p>
+        A durable list of work. A producer writes a message; a consumer picks it up, and the
+        message stays invisible-but-present until that consumer confirms it is done. If the
+        consumer dies mid-task, the message reappears and someone else takes it.
+      </p>
+      <p>
+        That single behaviour fixes the worst thing about version 1. There, a deploy during
+        ingestion destroys the work silently and nothing ever retries. Here, killing a worker
+        costs one redelivery.
+      </p>
+      <p>
+        <strong>Three queues, not one.</strong> Ingestion is bulk work measured in throughput;
+        chat is interactive work measured in latency. Sharing a queue means somebody's fifty-file
+        upload sits in front of everybody's questions, which is version 1's limit 02 reproduced at
+        a larger scale.
+      </p>
+      <p>
+        The third is <code>transcribe</code>, and it points the other way: the workers
+        <em>write</em> to it and the speech-to-text service <em>reads</em> from it. That inversion
+        is the subject of Part 5, and it is what removes the last long-held connection in the
+        system.
+      </p>
+      <p>
+        <strong>A dead-letter queue on each.</strong> After a handful of failures a message moves
+        aside instead of retrying for ever. Without one, a single corrupt file can occupy a worker
+        permanently.
+      </p>
+      <p>
+        Delivery is <em>at least once</em>, so handlers must be idempotent — processing the same
+        message twice must be harmless. Version 1 is already most of the way there: chunk ids are
+        deterministic and the vector store upserts rather than inserts.
+      </p>
+      <p class="replaces"><b>Replaces:</b> <code>background.add_task</code>, which is a queue with no durability, no retry, and no consumer.</p>
+    </div>
+
+    <div class="prose"><h3>State — what everything shares</h3></div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>Amazon RDS for PostgreSQL</h4><span class="role">the database</span></div>
+      <p>
+        A managed Postgres: backups, patching, failover to a standby in another availability zone,
+        all handled. It replaces a SQLite file, and the reason is not snobbery — SQLite locks the
+        whole file for a write, so ingestion writing status blocks every browser reading it, and
+        the database lives on one instance's disk and dies with it.
+      </p>
+      <p>
+        Version 1 needs no code change for this. <code>DATABASE_URL</code> already selects the
+        engine; SQLAlchemy does the rest.
+      </p>
+      <p class="replaces"><b>Replaces:</b> <code>sqlite:///./local.db</code> on the instance's disk.</p>
+    </div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>pgvector</h4><span class="role">a Postgres extension</span></div>
+      <p>
+        Adds a vector column type and similarity search to Postgres. Chunks, their metadata and
+        their embeddings live in one table, in one system, with one backup and one set of
+        credentials.
+      </p>
+      <p>
+        This is a deliberate choice over a dedicated vector database. At this scale the simplicity
+        wins: a chunk and its vector are written in the same transaction, so they cannot disagree,
+        and there is no second system to operate. Graduate to OpenSearch Serverless when the index
+        stops fitting comfortably in memory or you want hybrid keyword-and-vector search — and
+        treat that as a planned migration rather than something to pre-build.
+      </p>
+      <p class="replaces"><b>Replaces:</b> Chroma on the GPU machine, which died whenever that machine did.</p>
+    </div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>Amazon RDS Proxy</h4><span class="role">connection pooling</span></div>
+      <p>
+        Postgres connections are expensive and limited. Thirty API tasks plus forty workers, each
+        with its own pool, will exhaust a small instance's connection limit long before its CPU.
+        RDS Proxy holds one warm pool and lends connections out, so scaling the fleet does not
+        scale the connection count.
+      </p>
+      <p>
+        It also shortens failover: the proxy reconnects to the new primary rather than every task
+        discovering the failure on its own.
+      </p>
+      <p class="replaces"><b>Replaces:</b> nothing — one process needed no pooling.</p>
+    </div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>Amazon ElastiCache for Redis</h4><span class="role">cache and message bus</span></div>
+      <p>Three jobs, and the second is the interesting one.</p>
+      <p>
+        <strong>The conversation window.</strong> Version 1 keeps the last few turns in a Python
+        dictionary, which works only because there is one process. With thirty API tasks, a user's
+        history has to live somewhere all of them can see. The code already anticipates this:
+        <code>memory.py</code> has a Redis implementation behind the same two methods, chosen by a
+        setting.
+      </p>
+      <p>
+        <strong>Pub/sub for streaming.</strong> A chat worker generates tokens, but the browser's
+        connection is held by some API task, and the two will not be the same process. The worker
+        publishes tokens to a channel named for the message; whichever API task holds that
+        connection is subscribed and relays them. This is what makes token-by-token streaming work
+        across a fleet.
+      </p>
+      <p>
+        <strong>Ordinary caching.</strong> Session status is read constantly and changes rarely.
+      </p>
+      <p class="replaces"><b>Replaces:</b> a <code>defaultdict</code> that died with the process.</p>
+    </div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>Amazon S3</h4><span class="role">files — largely unchanged</span></div>
+      <p>
+        Version 1 already uses S3 correctly, and this is the part of it that needs no rethinking.
+        The browser uploads straight to the bucket with a presigned URL, and the speech-to-text
+        service downloads straight from it with another. File bytes never pass through the
+        application, which is why a two-gigabyte video does not require a two-gigabyte server.
+      </p>
+      <p>
+        One addition: <strong>S3 event notifications</strong>. When an object lands, S3 puts a
+        message on the ingest queue itself. Version 1 waits for the browser to call
+        <code>/files/register</code> and simply believes it — if the user closes the tab after
+        uploading, the file is never processed. Having storage announce its own arrivals removes
+        that trust.
+      </p>
+      <p>
+        Add lifecycle rules too: expire raw uploads after some period, keep the extracted text.
+      </p>
+      <p class="replaces"><b>Replaces:</b> nothing — it improves on what is already there.</p>
+    </div>
+
+    <div class="prose"><h3>Identity and secrets</h3></div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>Amazon Cognito</h4><span class="role">user accounts</span></div>
+      <p>
+        Sign-up, sign-in, and signed tokens. Version 1 has no notion of a person: a session id is
+        the only identity, nothing verifies it, and anyone holding one can read those documents.
+        With hundreds of users that is not a limitation, it is a data breach.
+      </p>
+      <p>
+        Every request carries a JWT; every session row gets an owner; every query filters by it.
+      </p>
+      <p class="replaces"><b>Replaces:</b> limit 08 — "anyone can read anyone's files".</p>
+    </div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>AWS Secrets Manager and IAM roles</h4><span class="role">credentials</span></div>
+      <p>
+        Database passwords live in Secrets Manager and rotate; everything else uses IAM task roles,
+        which hand short-lived credentials to a running container automatically. Version 1 already
+        does the important half of this — the EC2 instance role means no access key exists to leak.
+        v2 keeps that discipline and extends it per service, so the chat workers cannot write to
+        the bucket and the API cannot read the queue.
+      </p>
+      <p class="replaces"><b>Replaces:</b> the instance role, generalised and narrowed.</p>
+    </div>
+
+    <div class="prose"><h3>Network and operations</h3></div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>VPC, subnets, security groups</h4><span class="role">the network</span></div>
+      <p>
+        Public subnets hold only the load balancer. Everything else — API tasks, workers, database,
+        cache — sits in private subnets with no route from the internet. Security groups then allow
+        exactly one hop each: ALB to API, API and workers to database, workers outbound to the
+        model services.
+      </p>
+      <p>
+        Version 1 gets the spirit of this right on one machine by binding uvicorn to
+        <code>127.0.0.1</code>. This is the same idea with more machines.
+      </p>
+      <p class="replaces"><b>Replaces:</b> a single security group and a loopback bind.</p>
+    </div>
+
+    <div class="aws">
+      <div class="aws-head"><h4>CloudWatch, and OpenTelemetry tracing</h4><span class="role">seeing what happened</span></div>
+      <p>
+        Version 1's last limitation is "when it is slow, you cannot say why", and with one process
+        and a log file that is true. Distributed systems make it worse: a slow answer might be the
+        queue, the database, the retrieval, or the model.
+      </p>
+      <p>
+        So: structured JSON logs, metrics for queue depth and per-stage duration, alarms on the
+        dead-letter queues and on age-of-oldest-message, and a trace id created at the ALB and
+        carried through the queue message into the worker and out to the model service. The trace
+        is what turns "chat feels slow" into "retrieval is taking 900ms at p99".
+      </p>
+      <p class="replaces"><b>Replaces:</b> <code>journalctl</code> on one box.</p>
+    </div>
+
+    <div class="callout">
+      <span class="tag">Calling the model services</span>
+      <p>
+        The services themselves are out of scope, but <em>how the workers call them</em> is not,
+        and version 1 has none of this. Every call needs a <strong>timeout</strong>, so a slow
+        service cannot hold a worker for fifteen minutes; <strong>retries with exponential backoff
+        and jitter</strong>, so a blip does not fail a job and a recovery does not arrive as a
+        thundering herd; and a <strong>circuit breaker</strong>, so when a service is genuinely
+        down the workers stop hammering it and fail fast instead.
+      </p>
+      <p>
+        Concurrency also has to be bounded. An autoscaling worker fleet with no limit will happily
+        send five hundred simultaneous requests at a GPU sized for fifty, and turn a fast service
+        into a broken one.
+      </p>
+    </div>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2><span class="num">Part 3</span>Getting the files in</h2>
+    <div class="prose">
+      <p>
+        The browser still uploads straight to S3. What changes is what happens next: storage
+        announces the arrival, and one message is created <em>per file</em> rather than one task
+        per session.
+      </p>
+    </div>
+
+    <div class="flow" role="img" aria-label="Browser asks for links, uploads to S3, S3 raises an event, the queue receives one message per file, a worker converts chunks and embeds, and the database is updated">
+      <div class="node">Ask for links<small>API, milliseconds</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node hi">PUT to S3<small>presigned, direct</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node store">S3 event<small>storage announces it</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node store">SQS<small>one message per file</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node">Worker<small>convert · chunk · embed</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node">Postgres<small>status + vectors</small></div>
+    </div>
+    <p class="flow-note">The API appears once, at the start, and does nothing slow.</p>
+
+    <div class="prose">
+      <p>
+        <strong>One message per file</strong> is what turns a fifty-file upload from fifty
+        sequential conversions into fifty parallel ones across the worker fleet. Version 1
+        processes them in a loop inside a single background task, so the session takes as long as
+        the sum of its files.
+      </p>
+      <p>
+        A video takes one more hop, and it is a second queue rather than a phone call — see
+        <a href="#part5">Part 5</a>, which is the part of this design that took the longest to get
+        right.
+      </p>
+      <p>
+        The session is finished when its last file is. Each worker, on completion, decrements a
+        counter in the same transaction that marks the file done, and whoever takes it to zero
+        marks the session ready. No coordinator is needed.
+      </p>
+      <p>
+        <strong>Chunking must stream.</strong> Version 1 splits an entire document into one list of
+        words, which measured at sixteen to twenty-six times the file's size in memory — a
+        hundred-megabyte text file is enough to kill a small machine. A worker reading and emitting
+        chunks incrementally has a flat memory profile regardless of file size.
+      </p>
+    </div>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2><span class="num">Part 4</span>Answering a question, in real time</h2>
+    <div class="prose">
+      <p>
+        This is where "hundreds of users, in real time" is won or lost. The mechanism is the same
+        queue, plus one addition: the answer is streamed as it is generated rather than delivered
+        when it is finished.
+      </p>
+    </div>
+
+    <div class="flow" role="img" aria-label="Question posted to the API, enqueued, a chat worker retrieves and generates, publishing tokens to Redis, which an API task relays to the browser over server-sent events">
+      <div class="node">POST question<small>API writes a row</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node store">SQS chat<small>one message</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node">Chat worker<small>retrieve · prompt</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node hi">Tokens &rarr; Redis<small>published as generated</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node">API task<small>subscribed</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node">Browser<small>SSE, token by token</small></div>
+    </div>
+
+    <div class="prose">
+      <p>
+        <strong>Why polling has to go.</strong> Version 1's browser asks "is it done?" every two
+        seconds. With three hundred users that is a hundred and fifty requests a second of pure
+        overhead, none of which carries information most of the time — and the user still waits up
+        to two seconds after the answer exists. Server-Sent Events invert it: the browser opens one
+        connection and the server writes to it when there is something to say.
+      </p>
+      <p>
+        SSE rather than WebSockets because the traffic is one-directional. The browser has nothing
+        to say mid-answer, and SSE is ordinary HTTP with automatic reconnection built into the
+        browser.
+      </p>
+      <p>
+        <strong>Perceived speed is mostly first-token latency.</strong> A four-second answer that
+        starts appearing after 400 milliseconds feels immediate; the same answer delivered whole
+        after four seconds feels slow. This is the single largest user-visible difference between
+        the two versions, and it costs no GPU improvement at all.
+      </p>
+      <p>
+        The database still receives the finished answer, so a reconnecting browser can recover it.
+        Redis carries the live stream; Postgres remains the record.
+      </p>
+    </div>
+
+    <div class="callout">
+      <span class="tag">Retrieval, unchanged in shape</span>
+      <p>
+        Embed the question, search, fetch the winning chunks, assemble a prompt. That sequence is
+        identical to version 1 — it was never the problem. The difference is that it now happens
+        in a worker, against pgvector, with the chunk text retrieved in the same query as the
+        vector search rather than in a second round trip to storage.
+      </p>
+    </div>
+  </section>
+
+  <hr />
+
+  <section id="part5">
+    <h2><span class="num">Part 5</span>Talking to machines you do not own</h2>
+    <div class="prose">
+      <p>
+        The three model services run somewhere else — a Colab runtime, a rented GPU box, someone
+        else's account. Two of the workers have to reach them, and it is tempting to treat that as
+        one problem with one answer. It is not.
+      </p>
+      <p>
+        <strong>An earlier draft of this document was wrong about this.</strong> It claimed that
+        moving work into a queue meant "nobody is holding a connection waiting". That is true of
+        the browser and true of the API — and false of the worker, which was still making a
+        fifteen-minute synchronous call to a GPU behind a tunnel that closes connections after a
+        hundred seconds. Queueing the front of a system does not fix the back of it.
+      </p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Hop</th><th>How</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>worker &rarr; <strong>speech to text</strong></td>
+            <td class="ep">a queue</td>
+            <td>minutes of work, nobody waiting live, and the GPU should pull when it is ready</td>
+          </tr>
+          <tr>
+            <td>worker &rarr; <strong>embedding, to index</strong></td>
+            <td class="ep">a queue</td>
+            <td>bulk work, and a thousand uploads at once must not become a thousand connections</td>
+          </tr>
+          <tr>
+            <td>worker &rarr; <strong>embedding, to query</strong></td>
+            <td class="ep">direct call</td>
+            <td>milliseconds, and it sits in the middle of a chat — a queue hop is latency for nothing</td>
+          </tr>
+          <tr>
+            <td>worker &rarr; <strong>language model</strong></td>
+            <td class="ep">direct call</td>
+            <td>latency decides how it feels, and <em>you cannot stream through a queue</em></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prose">
+      <h3>Why transcription belongs on a queue</h3>
+      <p>
+        It is the textbook workload for one. The job takes minutes, no one is watching it happen,
+        and the failure mode a queue handles — the machine doing the work disappears — is not
+        hypothetical when that machine is a Colab runtime.
+      </p>
+      <p>
+        The decisive advantage is <span class="mk">backpressure</span>. With a direct call, five
+        videos arriving at once become five connections to a service that can transcribe one at a
+        time; four of them sit in a socket burning their timeout budget, and the one that dies is
+        whichever was last in the queue rather than whichever was largest. With a queue, the GPU
+        takes the next message when it has finished the previous one. Nothing waits on a
+        connection, so nothing times out. A backlog is a number you can see and scale on, rather
+        than a failure you discover.
+      </p>
+    </div>
+
+    <div class="flow" role="img" aria-label="The ingest worker signs two URLs and posts a message to a transcribe queue; the STT service consumes it, fetches the video from S3, transcribes, and writes results back to S3; that write raises an event which returns the job to the worker fleet.">
+      <div class="node">Ingest worker<small>signs two URLs</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node hi">SQS transcribe<small>the job description</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node">STT service<small>pulls when free</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node store">S3<small>GET media · PUT chunks</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node store">S3 event<small>results landed</small></div>
+      <div class="arr">&rarr;</div>
+      <div class="node">Worker<small>writes rows, marks done</small></div>
+    </div>
+    <p class="flow-note">No connection is held open at any point, by anyone.</p>
+
+    <div class="callout">
+      <span class="tag">The message carries its own permissions</span>
+      <p>
+        The worker puts two presigned URLs into the message: a <strong>GET</strong> for the video
+        and a <strong>PUT</strong> for the results. The speech-to-text service reads one, writes
+        the other, and never needs to know your bucket's name, your region, or any credential of
+        yours. The permission is inside the link and it expires.
+      </p>
+      <p>
+        The results landing in S3 then raises an event that returns the job to the worker fleet, so
+        the GPU does not need to send anything back either. Version 1 already discovered this
+        pattern for uploads and again for downloads; this is the third use of it, and by now it is
+        clearly the shape of the thing.
+      </p>
+    </div>
+
+    <div class="prose">
+      <h3>The same model, two deployments</h3>
+      <p>
+        Embedding appears twice in this system and the two uses have nothing in common except the
+        weights they load. Indexing is bulk work nobody is watching; a query is a few milliseconds
+        with a person waiting at the other end.
+      </p>
+      <p>
+        Left on one fleet they interfere, and in the direction that hurts. Someone uploading a
+        four-hundred-page document produces hundreds of embedding batches back to back, and every
+        one of them competes with somebody else's question. Chat quietly gets slower whenever
+        anyone uploads anything — <span class="mk">version 1's limit 02 again, one layer further
+        down</span>: bulk work starving interactive work, this time on the GPU rather than in a
+        thread pool.
+      </p>
+      <p>
+        So: two deployments of the same model. An <strong>online</strong> one, sized for latency,
+        serving queries and nothing else; and a <strong>batch</strong> one, sized for throughput,
+        which only ever drains the indexing queue. Once they are separate, indexing can run the
+        batch fleet at a hundred percent without a single query noticing.
+      </p>
+
+      <h3>Why indexing must be a queue, and querying must not</h3>
+      <p>
+        For indexing the argument is not connection fragility — a batch of a few hundred chunks
+        takes about a second, so nothing is at risk of timing out. The argument is what happens
+        when a thousand people upload at once.
+      </p>
+      <p>
+        <strong>Autoscaling cannot outrun a burst.</strong> A GPU task takes minutes to become
+        useful: provision the instance, pull the image, load the weights. Scaling is reactive, so
+        it responds to load that has already arrived. With direct calls, the fleet is swamped in
+        the first seconds, calls time out, workers retry, and the retries add load — a cascade
+        during exactly the window in which scaling cannot help. With a queue, the same burst is a
+        number going up. Nothing fails. Capacity arrives three minutes later and starts draining.
+      </p>
+      <p>
+        A queue is also what makes cheap capacity safe. If a spot instance disappears mid-message
+        the visibility timeout expires and another consumer picks the message up, which is not
+        true of a synchronous call to a machine that has gone away. That is most of the GPU bill.
+      </p>
+      <p>
+        <strong>Scale the consumers on queue depth; alarm on queue age.</strong> Depth is the
+        right signal for adding capacity — it says how much work is outstanding. Age of the oldest
+        message is the right thing to promise and to page on, because it is the only number that
+        corresponds to how long a real person has been waiting. "Nothing older than five minutes"
+        is a commitment; "depth under five hundred" means something different every day depending
+        on how large the documents are.
+      </p>
+
+      <h3>Why generation must not be</h3>
+      <p>
+        Putting the language model behind a queue would be a mistake, for two reasons that are
+        easy to miss.
+      </p>
+      <p>
+        <strong>You cannot stream through a queue.</strong> A queue delivers a finished message.
+        Streaming is a byte flow that begins before the answer exists — which is the whole source
+        of the "real time" feeling in Part 4. A queue would give the answer back complete, some
+        seconds later, which is exactly what version 1 already does.
+      </p>
+      <p>
+        <strong>A well-served model wants concurrent connections.</strong> Modern inference servers
+        earn their throughput by <em>continuous batching</em>: several in-flight requests are
+        merged into a single pass over the GPU. Feeding such a server one message at a time
+        defeats the mechanism it exists for. Direct concurrent calls are not a compromise there;
+        they are the interface it is designed around.
+      </p>
+    </div>
+
+    <div class="prose">
+      <h3>The credential problem, and its proper answers</h3>
+      <p>
+        A queue only works if the consumer can read it, and this consumer is outside your account.
+        The rule worth holding on to is: <span class="mk">never put a long-lived key on a machine
+        you do not control.</span> Everything below is a way of obeying it.
+      </p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Approach</th><th>How it avoids a stored key</th><th>Use when</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>OIDC federation</strong></td>
+            <td>the platform issues an identity token, swapped for temporary credentials</td>
+            <td class="who">the platform supports it — GitHub Actions, GKE, AKS</td>
+          </tr>
+          <tr>
+            <td><strong>IAM Roles Anywhere</strong></td>
+            <td>an X.509 certificate you issued is exchanged for temporary credentials</td>
+            <td class="who">on-prem or another cloud, with somewhere safe for the key</td>
+          </tr>
+          <tr>
+            <td><strong>A broker you own</strong></td>
+            <td>the credential never leaves your side; the GPU calls your endpoint instead</td>
+            <td class="who">everywhere else — including Colab</td>
+          </tr>
+          <tr>
+            <td><strong>A scoped IAM user</strong></td>
+            <td>it does not — it minimises the damage instead</td>
+            <td class="who">a last resort, with real discipline</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prose">
+      <p>
+        <strong>For Colab specifically, the first two do not apply.</strong> Colab issues no
+        workload identity to federate, and Roles Anywhere would mean keeping a private key in
+        Drive and re-fetching it every session, which is a longer-lived secret than the one it
+        replaces.
+      </p>
+      <p>
+        So: <strong>a broker</strong>. The GPU asks a small endpoint of yours for its next job; that
+        endpoint holds the AWS credentials and talks to the queue on its behalf. The GPU holds a
+        token that grants nothing in AWS, that you can revoke by deleting a row, and that only ever
+        lets it <em>receive work</em>.
+      </p>
+      <p>
+        It has a pleasant side effect. The connection is outbound from the GPU, so the machine
+        needs no public address at all — no tunnel, no ephemeral hostname, and none of the
+        hundred-second limit that shaped so much of version 1.
+      </p>
+      <p>
+        If you use a scoped IAM user instead, which is defensible while learning, make it
+        deliberate: one queue, exactly <code>ReceiveMessage</code>, <code>DeleteMessage</code> and
+        <code>ChangeMessageVisibility</code>, no wildcards, a dedicated user that does nothing
+        else, rotation on a schedule, and an alarm on unexpected use. What makes that survivable is
+        not the scoping alone — it is that the credential can only take work off a queue. It cannot
+        read your bucket, touch your database, or start an instance.
+      </p>
+      <p>
+        On a GPU host inside your own network this entire section evaporates: the container gets a
+        task role like everything else. The difficulty is not queues, it is <em>somebody else's
+        computer</em>.
+      </p>
+    </div>
+
+    <div class="callout">
+      <span class="tag">What we actually build, and what we do not</span>
+      <h3>One GPU. No autoscaling. On purpose.</h3>
+      <p>
+        Everything above about scaling the GPU side is <strong>design, not deliverable</strong>.
+        In this course the three model services run on a single Colab runtime. There is no fleet
+        to scale, no spot capacity, and no second deployment — one card, and whatever it can do.
+      </p>
+      <p>
+        That is a budget constraint rather than a design opinion, and it is written down here so
+        that nobody mistakes the gap for an oversight. Concretely, what changes:
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Design says</th><th>We run</th></tr></thead>
+          <tbody>
+            <tr><td>batch fleet, autoscaled on queue depth</td><td class="who">one process, fixed size</td></tr>
+            <tr><td>separate online and batch embedding deployments</td><td class="who">one deployment doing both</td></tr>
+            <tr><td>spot capacity, scaled to zero when idle</td><td class="who">a Colab runtime that is either on or off</td></tr>
+            <tr><td>indexing latency held under an SLO</td><td class="who">whatever one GPU manages — expect a backlog</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        <strong>The queue still earns its place, even with one consumer.</strong> This is the
+        important part. A queue in front of a single GPU is not a scaling mechanism there — it is
+        a way of making one slow consumer safe. A thousand uploads arriving at once become a
+        backlog rather than a thousand failed connections; a Colab runtime dying halfway through
+        loses nothing, because unacknowledged messages come back; and the depth of that queue is a
+        number that tells you honestly how far behind you are. None of that requires a second
+        instance.
+      </p>
+      <p>
+        <strong>What we optimise instead</strong> is the one card: batching, quantisation, kernel
+        and runtime choices, keeping models warm. That is a different discipline from everything
+        else in this document, and it is where the remaining headroom is when you cannot buy more
+        hardware.
+      </p>
+      <p>
+        <strong>And this is the point of building the rest properly.</strong> Every AWS decision
+        here is made as though the GPU side will one day scale, so that when there is budget, it
+        is a configuration change and not a redesign: raise a desired-count, point the queue at a
+        real fleet, split the embedding deployments. The application does not learn about any of
+        it. <span class="mk">The single GPU is a known ceiling with a door in it</span> — which is
+        a different thing from an architecture that cannot grow.
+      </p>
+    </div>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2><span class="num">Part 6</span>Every version 1 limitation, and what answers it</h2>
+    <div class="prose">
+      <p>
+        Version 1's design document lists fifteen ways it breaks. This is the point of version 2,
+        so it is worth going through them one at a time rather than claiming the architecture is
+        simply better.
+      </p>
+    </div>
+
+    <div class="limits">
+      <div class="limit">
+        <span class="n">01</span>
+        <div>
+          <h4>Restart the API and the work vanishes</h4>
+          <p>Work lived in the web server's memory.</p>
+          <span class="fix">SQS. A dead worker's message reappears and is retried.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">02</span>
+        <div>
+          <h4>Reading a big file slows everyone's chat</h4>
+          <p>Conversion competed with request handling in one process.</p>
+          <span class="fix">Separate queues and separate worker fleets. Bulk work cannot delay interactive work.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">03</span>
+        <div>
+          <h4>A failed file is never retried</h4>
+          <p>It was marked failed and abandoned.</p>
+          <span class="fix">Automatic retry with backoff; a dead-letter queue for what genuinely cannot be processed.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">04</span>
+        <div>
+          <h4>A long video times out mid-transcription</h4>
+          <p>One HTTP connection had to survive the whole job — the browser's, then the worker's.</p>
+          <span class="fix">A queue in front of the GPU too, so no connection is held anywhere. Part 5.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">05</span>
+        <div>
+          <h4>Everything must know everyone's address</h4>
+          <p>Three URLs, reachable at the moment of the call.</p>
+          <span class="fix">A queue for the slow service and a broker for its credentials, so it is pulled from rather than dialled. Timeouts and a circuit breaker on what is still called directly.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">06</span>
+        <div>
+          <h4>Two people at once is a traffic jam</h4>
+          <p>One process, one file at a time.</p>
+          <span class="fix">Horizontal scale on every tier, independently.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">07</span>
+        <div>
+          <h4>Polling is mostly wasted effort</h4>
+          <p>Every browser asked every two seconds.</p>
+          <span class="fix">Server-Sent Events. The server speaks when it has something to say.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">08</span>
+        <div>
+          <h4>Anyone can read anyone's files</h4>
+          <p>A session id was the only identity, and nothing checked it.</p>
+          <span class="fix">Cognito, a JWT on every request, an owner on every row.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">09</span>
+        <div>
+          <h4>No limit on what can be uploaded</h4>
+          <p>Nothing capped size, count or rate.</p>
+          <span class="fix">WAF rate limits, per-user quotas, size caps enforced when the upload link is issued.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">10</span>
+        <div>
+          <h4>When it is slow, you cannot say why</h4>
+          <p>One log file and no timings.</p>
+          <span class="fix">Structured logs, per-stage metrics, and a trace id carried from the load balancer through the queue to the GPU.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">11</span>
+        <div>
+          <h4>Forty slow operations freeze the API</h4>
+          <p>Background work shared the request thread pool.</p>
+          <span class="fix">The API does no slow work, and is async, so connections cost almost nothing.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">12</span>
+        <div>
+          <h4>Writers block readers in the database</h4>
+          <p>SQLite locks the file for a write.</p>
+          <span class="fix">Postgres, with proper concurrency, behind RDS Proxy.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">13</span>
+        <div>
+          <h4>A large text file costs twenty times its size in memory</h4>
+          <p>The whole document became one list of words.</p>
+          <span class="fix">Stream and chunk incrementally; enforce a size cap when issuing the upload link.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">14</span>
+        <div>
+          <h4>The vectors live on a machine you do not control</h4>
+          <p>The index died with the GPU runtime, silently.</p>
+          <span class="fix">pgvector, in the managed database, backed up with everything else.</span>
+        </div>
+      </div>
+      <div class="limit">
+        <span class="n">15</span>
+        <div>
+          <h4>The public address changes without warning</h4>
+          <p>A free tunnel is renamed whenever it restarts.</p>
+          <span class="fix">A domain you own, with a certificate that renews itself.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2><span class="num">Part 7</span>What version 2 does not solve</h2>
+    <div class="prose">
+      <p>
+        A design document that only lists victories is not much use. These are open, and knowing
+        them is part of the design.
+      </p>
+    </div>
+
+    <div class="limits">
+      <div class="limit open">
+        <span class="n">A</span>
+        <div>
+          <h4>The GPU is still the ceiling — and in this course it is one card</h4>
+          <p>
+            Every improvement here moves work <em>to</em> the model services faster. If they
+            saturate, a deeper queue is all you have bought, and the honest fix is more GPU, a
+            smaller model, or better batching.
+          </p>
+          <p>
+            For this project that ceiling is concrete: a single Colab runtime, no fleet, no
+            autoscaling. Expect an indexing backlog under load. The queue makes that a wait rather
+            than a failure, which is the most an architecture can do about a hardware limit.
+          </p>
+          <span class="fix">Alarm on queue age. Shed load rather than accept work you cannot do. Then optimise the one card — batching, quantisation, warm models.</span>
+        </div>
+      </div>
+      <div class="limit open">
+        <span class="n">B</span>
+        <div>
+          <h4>Cost scales with success</h4>
+          <p>
+            Fargate, RDS, ElastiCache, NAT gateways and a load balancer have a floor of a few
+            hundred dollars a month before a single user arrives — perhaps twenty times what
+            version 1 costs.
+          </p>
+          <span class="fix">Justify it with users, not with architecture. Version 1 is the right answer for a class.</span>
+        </div>
+      </div>
+      <div class="limit open">
+        <span class="n">C</span>
+        <div>
+          <h4>More moving parts, more ways to be subtly wrong</h4>
+          <p>
+            At-least-once delivery means duplicate work if a handler is not idempotent. A queue can
+            silently fall behind. Two systems can disagree in ways one system never could.
+          </p>
+          <span class="fix">Idempotent handlers, alarms on queue age, and traces — which is why observability is not optional here.</span>
+        </div>
+      </div>
+      <div class="limit open">
+        <span class="n">D</span>
+        <div>
+          <h4>Retrieval quality is untouched</h4>
+          <p>
+            None of this makes an answer better. Chunking strategy, re-ranking, and prompt
+            assembly decide that, and they are identical in both versions.
+          </p>
+          <span class="fix">A separate problem, and the one with the most headroom left in it.</span>
+        </div>
+      </div>
+      <div class="limit open">
+        <span class="n">E</span>
+        <div>
+          <h4>One region</h4>
+          <p>Everything here lives in one AWS region. A regional outage is an outage.</p>
+          <span class="fix">Multi-region is a different design and a much larger bill. Name it, do not build it yet.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr />
+
+  <section>
+    <h2><span class="num">Part 8</span>The order of work</h2>
+    <div class="prose">
+      <p>
+        This is not a rewrite. Each step below is shippable on its own, and each one leaves a
+        working system — which matters, because a migration that only pays off at the end usually
+        does not get finished.
+      </p>
+    </div>
+
+    <ol class="steps">
+      <li>
+        <strong>Postgres and Redis.</strong> Both are settings changes: <code>DATABASE_URL</code>
+        and <code>MEMORY_BACKEND</code> already exist and already select an implementation. No new
+        architecture, and it removes the two limits that kill data.
+      </li>
+      <li>
+        <strong>The queue and the workers.</strong> The big one. Replace
+        <code>background.add_task</code> with an SQS write, and move <code>ingest.run</code> and
+        <code>chat.answer</code> into worker processes almost unchanged — they are already
+        self-contained functions that open their own database session, which is exactly the shape a
+        worker needs.
+      </li>
+      <li>
+        <strong>Containers, load balancer, autoscaling.</strong> Now that the API is stateless and
+        does no slow work, running many of it is safe.
+      </li>
+      <li>
+        <strong>pgvector.</strong> Move the index into the database. Re-index everything, since
+        vectors from two models are not comparable.
+      </li>
+      <li>
+        <strong>The transcription queue.</strong> Turn the last synchronous call into a message the
+        GPU pulls, with presigned URLs in both directions and a broker holding the credentials.
+        This is what finally makes a long video safe.
+      </li>
+      <li>
+        <strong>Streaming.</strong> SSE plus Redis pub/sub. The first change users will actually
+        feel.
+      </li>
+      <li>
+        <strong>Identity, quotas, WAF.</strong> Necessary before anyone outside the room uses it.
+      </li>
+      <li>
+        <strong>Observability.</strong> Last in the list, first thing you will want at three in the
+        morning. Do not leave it out.
+      </li>
+    </ol>
+
+    <div class="callout">
+      <span class="tag">Notice what does not change</span>
+      <p>
+        The pipeline functions, the chunker, the prompt assembly, the storage abstraction, the
+        service contracts, and the entire frontend other than swapping a poll for an event source.
+        Version 1 put the slow work in the wrong <em>place</em>; it did not write it wrongly. Most
+        of the code survives the move, and that is a good sign about how version 1 was structured.
+      </p>
+    </div>
+  </section>
+
+  <hr />
+
+  <div class="closing">
+    <p>
+      Version 1 is the version you can hold in your head, and it is the right thing to have built
+      first: every limitation in it is one you can now name, reproduce, and explain. Version 2 is
+      what those limitations cost to fix.
+    </p>
+    <p>
+      Build it when you have users. Not before.
+    </p>
+    <p>
+      And when you do, notice which half of this document you will actually need to act on. The
+      AWS side is written so that growing it is a configuration change. The GPU side is one card
+      with a door in it, and walking through that door costs money rather than a redesign. Those
+      are the two kinds of constraint worth being able to tell apart.
+    </p>
+  </div>
+
+</div>
