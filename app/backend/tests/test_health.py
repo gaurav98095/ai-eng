@@ -3,7 +3,7 @@
 from fastapi.testclient import TestClient
 
 from edgentrag.api.app import create_app
-from edgentrag.core.config import Settings, get_settings
+from edgentrag.core.config import Settings
 
 
 def test_health_check_reports_a_healthy_api_process() -> None:
@@ -16,17 +16,39 @@ def test_health_check_reports_a_healthy_api_process() -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_readiness_check_reports_loaded_configuration() -> None:
-    """Readiness uses injected settings instead of the developer's environment."""
-    app = create_app()
-    app.dependency_overrides[get_settings] = lambda: Settings(environment="test")
-    client = TestClient(app)
+def test_readiness_check_reports_loaded_configuration(tmp_path) -> None:
+    """Readiness verifies a real test database, not the developer's database."""
+    database_path = tmp_path / "edgentrag-test.db"
+    settings = Settings(
+        environment="test",
+        database_url=f"sqlite+aiosqlite:///{database_path}",
+    )
 
-    response = client.get("/ready")
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.get("/ready")
 
     assert response.status_code == 200
     assert response.json() == {
         "status": "ready",
         "environment": "test",
-        "checks": {"configuration": "ok"},
+        "checks": {"configuration": "ok", "database": "ok"},
+    }
+
+
+def test_readiness_check_returns_503_when_database_is_unavailable(tmp_path) -> None:
+    """A live API can correctly report that it is not ready for traffic."""
+    database_path = tmp_path / "missing-directory" / "database.db"
+    settings = Settings(
+        environment="test",
+        database_url=f"sqlite+aiosqlite:///{database_path}",
+    )
+
+    with TestClient(create_app(settings=settings)) as client:
+        response = client.get("/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "environment": "test",
+        "checks": {"configuration": "ok", "database": "failed"},
     }

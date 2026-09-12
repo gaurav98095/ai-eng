@@ -9,6 +9,7 @@ Run it locally from the repository root:
 python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -e "./app/backend[dev]"
+cp app/backend/.env.example app/backend/.env
 .venv/bin/python -m uvicorn edgentrag.api.app:app --reload
 ~~~
 
@@ -24,7 +25,8 @@ Run the quality checks:
 The editable installation is required. Application code lives in
 backend/src/edgentrag, which deliberately is not on Python's import path by
 default. Installing the project makes the package importable and ensures local
-development behaves like a deployed package.
+development behaves like a deployed package. Settings load app/backend/.env,
+independent of the shell's current directory.
 
 For a one-off run without installing the project, point Uvicorn at the source
 directory explicitly:

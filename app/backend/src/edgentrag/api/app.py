@@ -1,21 +1,38 @@
-"""Application factory and the ASGI entry point.
+"""Application factory, lifespan, and the ASGI entry point.
 
 Keep startup wiring here. Route handlers live in dedicated modules so that
 features can grow without turning this file into an untestable dependency hub.
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from edgentrag.api.routes.health import router as health_router
+from edgentrag.core.config import Settings, load_settings
+from edgentrag.core.database import Database
 
 
-def create_app() -> FastAPI:
+def create_app(*, settings: Settings | None = None) -> FastAPI:
     """Create the HTTP application with its routes and metadata."""
+    app_settings = settings or load_settings()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """Create shared resources once and release them during shutdown."""
+        app.state.database = Database(app_settings.database_url)
+        try:
+            yield
+        finally:
+            await app.state.database.dispose()
+
     app = FastAPI(
         title="EdgentRAG API",
         version="0.1.0",
         description="API for uploading material and asking grounded questions.",
+        lifespan=lifespan,
     )
+    app.state.settings = app_settings
     app.include_router(health_router)
     return app
 

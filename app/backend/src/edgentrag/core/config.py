@@ -1,6 +1,7 @@
 """Typed configuration loaded from the environment."""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,7 +15,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=Path(__file__).resolve().parents[3] / ".env",
         env_file_encoding="utf-8",
         env_prefix="EDGENTRAG_",
         extra="ignore",
@@ -22,14 +23,14 @@ class Settings(BaseSettings):
 
     environment: Literal["local", "test", "production"] = "local"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    database_url: str = "sqlite+aiosqlite:///./edgentrag.db"
 
 
 @lru_cache
-def get_settings() -> Settings:
+def load_settings() -> Settings:
     """Build settings once per process.
 
     Parsing environment variables repeatedly is unnecessary, and caching makes
-    every dependency receive the same immutable configuration snapshot.
-    Tests can override this FastAPI dependency without mutating global state.
+    each application start use the same immutable configuration snapshot.
     """
     return Settings()

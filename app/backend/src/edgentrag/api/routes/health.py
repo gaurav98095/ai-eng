@@ -2,10 +2,13 @@
 
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel
+from sqlalchemy.exc import SQLAlchemyError
 
-from edgentrag.core.config import Settings, get_settings
+from edgentrag.api.dependencies import get_database, get_settings
+from edgentrag.core.config import Settings
+from edgentrag.core.database import Database
 
 router = APIRouter(tags=["health"])
 
@@ -19,9 +22,9 @@ class HealthResponse(BaseModel):
 class ReadinessResponse(BaseModel):
     """The dependency checks that currently make the API ready to serve."""
 
-    status: Literal["ready"]
+    status: Literal["ready", "not_ready"]
     environment: Literal["local", "test", "production"]
-    checks: dict[str, Literal["ok"]]
+    checks: dict[str, Literal["ok", "failed"]]
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -38,15 +41,27 @@ async def health_check() -> HealthResponse:
 @router.get("/ready", response_model=ReadinessResponse)
 async def readiness_check(
     settings: Annotated[Settings, Depends(get_settings)],
+    database: Annotated[Database, Depends(get_database)],
+    response: Response,
 ) -> ReadinessResponse:
-    """Report whether configuration required by this version has loaded.
+    """Report whether configuration and the database are ready.
 
-    Later components will extend checks with database, queue, and model-service
-    connectivity. Keeping readiness distinct means those failures will not
-    cause an orchestration platform to mistake a running API process for dead.
+    Later components will add queue and model-service checks. Keeping readiness
+    distinct from liveness means dependency failures do not cause an
+    orchestration platform to mistake a running API process for dead.
     """
+    try:
+        await database.ping()
+    except SQLAlchemyError:
+        response.status_code = 503
+        return ReadinessResponse(
+            status="not_ready",
+            environment=settings.environment,
+            checks={"configuration": "ok", "database": "failed"},
+        )
+
     return ReadinessResponse(
         status="ready",
         environment=settings.environment,
-        checks={"configuration": "ok"},
+        checks={"configuration": "ok", "database": "ok"},
     )
