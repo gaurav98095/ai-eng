@@ -1,9 +1,9 @@
 # Component 3: database boundary and readiness
 
-This component adds a database connection without adding application tables.
-That separation is intentional: first we establish how the application owns
-and tests a database resource; the next component will define the first data
-model and migration.
+This component established the database connection before adding application
+tables. That separation is intentional: first we established how the
+application owns and tests a database resource; Component 4 adds the first
+domain model and migration.
 
 ## What changed
 
@@ -103,6 +103,6 @@ Run the checks from the repository root:
 
 ## What comes next
 
-The next component adds the first domain model, an initial migration, and a
-database-session dependency. We will not let routes write raw SQL or create
-tables on startup.
+Component 4 adds the first domain model, an initial migration, and a
+request-scoped database-session dependency. Routes still do not create tables
+on startup.

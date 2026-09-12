@@ -10,6 +10,7 @@ python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -e "./app/backend[dev]"
 cp app/backend/.env.example app/backend/.env
+.venv/bin/alembic -c app/backend/alembic.ini upgrade head
 .venv/bin/python -m uvicorn edgentrag.api.app:app --reload
 ~~~
 
@@ -20,6 +21,12 @@ Run the quality checks:
 ~~~bash
 .venv/bin/python -m ruff check app/backend
 .venv/bin/python -m pytest app/backend
+~~~
+
+After starting the API, create a session with:
+
+~~~bash
+curl -X POST http://127.0.0.1:8000/sessions
 ~~~
 
 The editable installation is required. Application code lives in

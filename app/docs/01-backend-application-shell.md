@@ -8,8 +8,8 @@ belongs where it does, and leaves the app runnable and tested.
 
 1. **Backend application shell** — the current tutorial.
 2. Backend settings and dependency wiring.
-3. Database schema and migrations.
-4. Session API.
+3. Database connection and readiness.
+4. First domain model, migration, and session API.
 5. File-upload API and S3 storage adapter.
 6. Queue contracts and ingestion worker.
 7. Colab broker and model-service client.

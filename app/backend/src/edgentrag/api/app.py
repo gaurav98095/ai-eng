@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from edgentrag.api.routes.health import router as health_router
+from edgentrag.api.routes.sessions import router as sessions_router
 from edgentrag.core.config import Settings, load_settings
 from edgentrag.core.database import Database
 
@@ -34,6 +35,7 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = app_settings
     app.include_router(health_router)
+    app.include_router(sessions_router)
     return app
 
 

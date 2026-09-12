@@ -12,9 +12,9 @@ from sqlalchemy.ext.asyncio import (
 class Database:
     """Own one engine and session factory for one application process.
 
-    Route handlers will receive sessions from this boundary in a later
-    component. Keeping engine ownership here gives the application one place
-    to configure, test, and gracefully dispose database resources.
+    Route handlers receive request-scoped sessions from this boundary.
+    Keeping engine ownership here gives the application one place to configure,
+    test, and gracefully dispose database resources.
     """
 
     def __init__(self, database_url: str) -> None:
