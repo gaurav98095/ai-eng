@@ -1,5 +1,0 @@
-# The ingest worker only. Docling reads PDFs and Word documents and pulls in
-# layout and OCR models, which is most of this image's size -- and a good
-# reason the API does not share it.
--r requirements.txt
-docling>=2.7,<3
