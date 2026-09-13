@@ -11,6 +11,10 @@ This walkthrough runs the pipeline currently implemented in the backend:
 The current pipeline ends when the job is queued. A worker to extract text and
 build a searchable index will be added in a later component.
 
+To run the full sequence automatically instead, open a terminal at the
+repository root and run `./test-run.sh`. The steps below show the individual
+requests for learning and troubleshooting.
+
 ## 1. Start the API
 
 Open Terminal 1 at the repository root:
