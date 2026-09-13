@@ -1,0 +1,44 @@
+"""Unit tests for the S3 adapter's signing contract."""
+
+from unittest.mock import Mock, patch
+
+import pytest
+
+from edgentrag.storage.s3 import S3ObjectStorage, StorageUnavailable
+
+
+def test_s3_adapter_signs_one_put_with_bound_content_type() -> None:
+    client = Mock()
+    client.generate_presigned_url.return_value = "https://signed.test/object"
+
+    with patch("edgentrag.storage.s3.boto3.client", return_value=client) as factory:
+        storage = S3ObjectStorage(bucket="private-bucket", region="ap-south-1")
+        url = storage.create_upload_url(
+            key="uploads/session/file-id",
+            content_type="application/pdf",
+            expires_in=900,
+        )
+
+    factory.assert_called_once()
+    client.generate_presigned_url.assert_called_once_with(
+        "put_object",
+        Params={
+            "Bucket": "private-bucket",
+            "Key": "uploads/session/file-id",
+            "ContentType": "application/pdf",
+        },
+        ExpiresIn=900,
+    )
+    assert url == "https://signed.test/object"
+    storage.close()
+
+
+def test_s3_adapter_fails_clearly_when_bucket_is_not_configured() -> None:
+    storage = S3ObjectStorage(bucket="", region="ap-south-1")
+
+    with pytest.raises(StorageUnavailable, match="bucket is not configured"):
+        storage.create_upload_url(
+            key="uploads/session/file-id",
+            content_type="text/plain",
+            expires_in=900,
+        )

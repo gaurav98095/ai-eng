@@ -23,11 +23,21 @@ Run the quality checks:
 .venv/bin/python -m pytest app/backend
 ~~~
 
-After starting the API, create a session with:
+Create a session and then request a presigned upload target:
 
 ~~~bash
-curl -X POST http://127.0.0.1:8000/sessions
+SESSION_ID=$(
+  curl -s -X POST http://127.0.0.1:8000/sessions \
+    | .venv/bin/python -c 'import json,sys; print(json.load(sys.stdin)["session_id"])'
+)
+curl -s -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/uploads" \
+  -H 'Content-Type: application/json' \
+  -d '{"files":[{"filename":"notes.pdf","content_type":"application/pdf","size_bytes":4096}]}'
 ~~~
+
+Real S3 upload URLs require EDGENTRAG_S3_BUCKET and AWS credentials from the
+standard AWS credential chain (or an EC2 instance role). Tests use fake storage
+and do not need AWS access.
 
 The editable installation is required. Application code lives in
 backend/src/edgentrag, which deliberately is not on Python's import path by

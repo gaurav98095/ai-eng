@@ -12,6 +12,7 @@ from edgentrag.api.routes.health import router as health_router
 from edgentrag.api.routes.sessions import router as sessions_router
 from edgentrag.core.config import Settings, load_settings
 from edgentrag.core.database import Database
+from edgentrag.storage.s3 import S3ObjectStorage
 
 
 def create_app(*, settings: Settings | None = None) -> FastAPI:
@@ -22,10 +23,15 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         """Create shared resources once and release them during shutdown."""
         app.state.database = Database(app_settings.database_url)
+        app.state.object_storage = S3ObjectStorage(
+            bucket=app_settings.s3_bucket,
+            region=app_settings.aws_region,
+        )
         try:
             yield
         finally:
             await app.state.database.dispose()
+            app.state.object_storage.close()
 
     app = FastAPI(
         title="EdgentRAG API",

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from edgentrag.core.config import Settings
 from edgentrag.core.database import Database
+from edgentrag.storage.s3 import ObjectStorage
 
 
 def get_settings(request: Request) -> Settings:
@@ -18,6 +19,11 @@ def get_settings(request: Request) -> Settings:
 def get_database(request: Request) -> Database:
     """Return the database boundary created during the application's lifespan."""
     return cast(Database, request.app.state.database)
+
+
+def get_object_storage(request: Request) -> ObjectStorage:
+    """Return the object-storage adapter configured for this application."""
+    return cast(ObjectStorage, request.app.state.object_storage)
 
 
 async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:

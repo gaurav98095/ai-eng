@@ -111,6 +111,5 @@ Run quality checks from the repository root:
 
 ## What comes next
 
-The next component will add file metadata and private object-storage URLs. The
-browser upload bytes will stay out of the API process.
-
+Component 5 adds file metadata and private object-storage URLs. The browser
+upload bytes stay out of the API process.
