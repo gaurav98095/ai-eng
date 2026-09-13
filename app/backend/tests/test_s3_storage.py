@@ -3,8 +3,14 @@
 from unittest.mock import Mock, patch
 
 import pytest
+from botocore.exceptions import ClientError
 
-from edgentrag.storage.s3 import S3ObjectStorage, StorageUnavailable
+from edgentrag.storage.s3 import (
+    ObjectMetadata,
+    ObjectNotFound,
+    S3ObjectStorage,
+    StorageUnavailable,
+)
 
 
 def test_s3_adapter_signs_one_put_with_bound_content_type() -> None:
@@ -50,3 +56,37 @@ def test_s3_adapter_fails_clearly_when_bucket_is_not_configured() -> None:
             content_type="text/plain",
             expires_in=900,
         )
+
+
+def test_s3_adapter_reads_object_metadata() -> None:
+    client = Mock()
+    client.head_object.return_value = {
+        "ContentLength": 4096,
+        "ContentType": "application/pdf",
+    }
+
+    with patch("edgentrag.storage.s3.boto3.client", return_value=client):
+        storage = S3ObjectStorage(bucket="private-bucket", region="us-east-1")
+        metadata = storage.get_object_metadata(key="uploads/session/file-id")
+
+    assert metadata == ObjectMetadata(size_bytes=4096, content_type="application/pdf")
+    client.head_object.assert_called_once_with(
+        Bucket="private-bucket",
+        Key="uploads/session/file-id",
+    )
+    storage.close()
+
+
+def test_s3_adapter_reports_an_object_that_has_not_arrived() -> None:
+    client = Mock()
+    client.head_object.side_effect = ClientError(
+        {"Error": {"Code": "404", "Message": "Not Found"}},
+        "HeadObject",
+    )
+
+    with patch("edgentrag.storage.s3.boto3.client", return_value=client):
+        storage = S3ObjectStorage(bucket="private-bucket", region="us-east-1")
+        with pytest.raises(ObjectNotFound, match="object was not found"):
+            storage.get_object_metadata(key="uploads/session/file-id")
+
+    storage.close()

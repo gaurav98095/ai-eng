@@ -9,9 +9,11 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from edgentrag.api.app import create_app
-from edgentrag.api.dependencies import get_object_storage
+from edgentrag.api.dependencies import get_ingestion_queue, get_object_storage
 from edgentrag.core.config import Settings
+from edgentrag.ingestion.queue import QueueUnavailable
 from edgentrag.sessions.models import SessionFile
+from edgentrag.storage.s3 import ObjectMetadata, ObjectNotFound
 
 
 class FakeObjectStorage:
@@ -19,6 +21,7 @@ class FakeObjectStorage:
 
     def __init__(self) -> None:
         self.requests: list[dict[str, str | int]] = []
+        self.metadata_by_key: dict[str, ObjectMetadata] = {}
 
     def create_upload_url(
         self,
@@ -35,6 +38,24 @@ class FakeObjectStorage:
             }
         )
         return f"https://storage.test/{key}"
+
+    def get_object_metadata(self, *, key: str) -> ObjectMetadata:
+        if key not in self.metadata_by_key:
+            raise ObjectNotFound("uploaded object was not found")
+        return self.metadata_by_key[key]
+
+
+class FakeIngestionQueue:
+    """Record queued file references without contacting SQS."""
+
+    def __init__(self) -> None:
+        self.requests: list[dict[str, str]] = []
+        self.unavailable = False
+
+    def enqueue_file(self, *, session_id: str, file_id: str) -> None:
+        if self.unavailable:
+            raise QueueUnavailable("test queue unavailable")
+        self.requests.append({"session_id": session_id, "file_id": file_id})
 
 
 def migrate_database(database_url: str) -> None:
@@ -156,3 +177,75 @@ def test_upload_rejects_files_larger_than_the_configured_limit(tmp_path) -> None
 
     assert response.status_code == 413
     assert storage.requests == []
+
+
+def test_upload_completion_checks_s3_then_queues_once(tmp_path) -> None:
+    database_path = tmp_path / "confirm-upload.db"
+    database_url = f"sqlite+aiosqlite:///{database_path}"
+    migrate_database(database_url)
+    app = create_app(settings=Settings(environment="test", database_url=database_url))
+    storage = FakeObjectStorage()
+    queue = FakeIngestionQueue()
+    app.dependency_overrides[get_object_storage] = lambda: storage
+    app.dependency_overrides[get_ingestion_queue] = lambda: queue
+
+    with TestClient(app) as client:
+        session_id = client.post("/sessions").json()["session_id"]
+        target = client.post(
+            f"/sessions/{session_id}/uploads",
+            json={
+                "files": [
+                    {
+                        "filename": "notes.pdf",
+                        "content_type": "application/pdf",
+                        "size_bytes": 4096,
+                    }
+                ]
+            },
+        ).json()["targets"][0]
+        complete_url = f"/sessions/{session_id}/uploads/{target['file_id']}/complete"
+
+        missing = client.post(complete_url)
+        assert missing.status_code == 409
+        assert queue.requests == []
+
+        object_key = str(storage.requests[0]["key"])
+        storage.metadata_by_key[object_key] = ObjectMetadata(
+            size_bytes=4095,
+            content_type="application/pdf",
+        )
+        wrong_size = client.post(complete_url)
+        assert wrong_size.status_code == 422
+        assert queue.requests == []
+
+        storage.metadata_by_key[object_key] = ObjectMetadata(
+            size_bytes=4096,
+            content_type="application/pdf",
+        )
+        queue.unavailable = True
+        unavailable = client.post(complete_url)
+        assert unavailable.status_code == 503
+        assert queue.requests == []
+
+        queue.unavailable = False
+        completed = client.post(complete_url)
+        repeated = client.post(complete_url)
+
+    assert completed.status_code == 202
+    assert completed.json()["status"] == "uploaded"
+    assert completed.json()["ingestion_job_enqueued"] is True
+    assert repeated.status_code == 202
+    assert len(queue.requests) == 1
+    assert queue.requests[0] == {
+        "session_id": session_id,
+        "file_id": target["file_id"],
+    }
+
+    engine = create_engine(f"sqlite:///{database_path}")
+    try:
+        with Session(engine) as database_session:
+            file_record = database_session.get(SessionFile, target["file_id"])
+            assert file_record is not None
+            assert file_record.status == "uploaded"
+    finally:
+        engine.dispose()

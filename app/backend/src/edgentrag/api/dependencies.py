@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from edgentrag.core.config import Settings
 from edgentrag.core.database import Database
+from edgentrag.ingestion.queue import IngestionQueue
 from edgentrag.storage.s3 import ObjectStorage
 
 
@@ -24,6 +25,11 @@ def get_database(request: Request) -> Database:
 def get_object_storage(request: Request) -> ObjectStorage:
     """Return the object-storage adapter configured for this application."""
     return cast(ObjectStorage, request.app.state.object_storage)
+
+
+def get_ingestion_queue(request: Request) -> IngestionQueue:
+    """Return the queue adapter created for this application process."""
+    return cast(IngestionQueue, request.app.state.ingestion_queue)
 
 
 async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:

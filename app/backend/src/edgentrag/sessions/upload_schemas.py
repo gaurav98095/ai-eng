@@ -48,3 +48,12 @@ class UploadResponse(BaseModel):
 
     session_id: str
     targets: list[UploadTarget]
+
+
+class UploadConfirmationResponse(BaseModel):
+    """Result after validating the object and scheduling ingestion."""
+
+    session_id: str
+    file_id: str
+    status: str
+    ingestion_job_enqueued: bool

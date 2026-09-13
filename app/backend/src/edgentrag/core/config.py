@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     aws_region: str = "ap-south-1"
     aws_endpoint_url: str | None = None
     s3_bucket: str = ""
+    ingestion_queue_url: str = ""
     upload_url_ttl_seconds: int = Field(default=900, gt=0, le=604800)
     max_upload_bytes: int = Field(default=2 * 1024 * 1024 * 1024, gt=0)
 
