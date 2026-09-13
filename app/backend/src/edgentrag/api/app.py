@@ -26,6 +26,7 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
         app.state.object_storage = S3ObjectStorage(
             bucket=app_settings.s3_bucket,
             region=app_settings.aws_region,
+            endpoint_url=app_settings.aws_endpoint_url,
         )
         try:
             yield

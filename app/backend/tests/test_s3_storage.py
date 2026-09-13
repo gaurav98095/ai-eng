@@ -12,7 +12,11 @@ def test_s3_adapter_signs_one_put_with_bound_content_type() -> None:
     client.generate_presigned_url.return_value = "https://signed.test/object"
 
     with patch("edgentrag.storage.s3.boto3.client", return_value=client) as factory:
-        storage = S3ObjectStorage(bucket="private-bucket", region="ap-south-1")
+        storage = S3ObjectStorage(
+            bucket="private-bucket",
+            region="ap-south-1",
+            endpoint_url="http://localhost:4566",
+        )
         url = storage.create_upload_url(
             key="uploads/session/file-id",
             content_type="application/pdf",
@@ -20,6 +24,10 @@ def test_s3_adapter_signs_one_put_with_bound_content_type() -> None:
         )
 
     factory.assert_called_once()
+    call_kwargs = factory.call_args.kwargs
+    assert call_kwargs["endpoint_url"] == "http://localhost:4566"
+    assert call_kwargs["region_name"] == "ap-south-1"
+    assert call_kwargs["config"].s3 == {"addressing_style": "path"}
     client.generate_presigned_url.assert_called_once_with(
         "put_object",
         Params={

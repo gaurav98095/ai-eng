@@ -88,6 +88,33 @@ reject the signature. The adapter uses boto3's default credential chain:
 Without a bucket or valid credentials, target creation returns a safe 503
 message. The API does not reveal SDK exception details to the browser.
 
+### Use Floci for local S3 development
+
+The example environment file points the S3 adapter at Floci on
+`http://localhost:4566`, with the development bucket `edgentrag-test-1` in
+`us-east-1` (Northern Virginia). In a terminal, start Floci and load its local
+AWS credentials before starting the API:
+
+~~~bash
+floci start
+eval "$(floci env)"
+~~~
+
+Set `EDGENTRAG_S3_BUCKET=edgentrag-test-1` and
+`EDGENTRAG_AWS_REGION=us-east-1` in `app/backend/.env`. The adapter switches
+to path-style S3 URLs for the emulator, which
+keeps presigned URLs addressable through its single local endpoint. When the
+API runs inside a container, use a Floci hostname reachable from that
+container instead of `localhost` (for example, the host gateway or the Floci
+service name). For real AWS, leave `EDGENTRAG_AWS_ENDPOINT_URL` unset and
+configure normal AWS credentials and permissions.
+
+If the bucket has not been created yet, run:
+
+~~~bash
+aws s3 mb s3://edgentrag-test-1 --region us-east-1
+~~~
+
 ## S3 CORS is separate from signing
 
 The browser's PUT request goes from the app's HTTPS origin to S3, so the bucket
@@ -127,4 +154,3 @@ parameters sent to boto3. They run against temporary SQLite databases.
 
 The next component will add an endpoint to confirm an upload landed, verify
 its object metadata, and place an ingestion job on a queue.
-

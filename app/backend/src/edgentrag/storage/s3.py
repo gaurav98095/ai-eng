@@ -27,17 +27,24 @@ class ObjectStorage(Protocol):
 class S3ObjectStorage:
     """Create short-lived upload links without proxying file bytes through API."""
 
-    def __init__(self, *, bucket: str, region: str) -> None:
+    def __init__(
+        self, *, bucket: str, region: str, endpoint_url: str | None = None
+    ) -> None:
         self.bucket = bucket
         self.region = region
+        self.endpoint_url = endpoint_url
 
     @cached_property
     def _client(self):
         """Create one SDK client on first use, not during application startup."""
         return boto3.client(
             "s3",
+            endpoint_url=self.endpoint_url,
             region_name=self.region,
-            config=Config(signature_version="s3v4"),
+            config=Config(
+                signature_version="s3v4",
+                s3={"addressing_style": "path"} if self.endpoint_url else {},
+            ),
         )
 
     def create_upload_url(
