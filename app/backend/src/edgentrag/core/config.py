@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,6 +32,22 @@ class Settings(BaseSettings):
     upload_url_ttl_seconds: int = Field(default=900, gt=0, le=604800)
     max_upload_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
     max_text_extract_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
+    embedding_service_url: AnyHttpUrl | None = None
+    embedding_api_token: SecretStr = SecretStr("")
+    embedding_batch_size: int = Field(default=32, gt=0, le=64)
+    embedding_request_timeout_seconds: float = Field(default=180, gt=0, le=600)
+
+    @model_validator(mode="after")
+    def validate_embedding_configuration(self) -> "Settings":
+        """Require a URL and bearer token together when embeddings are enabled."""
+        has_url = self.embedding_service_url is not None
+        has_token = bool(self.embedding_api_token.get_secret_value())
+        if has_url != has_token:
+            raise ValueError(
+                "embedding_service_url and embedding_api_token "
+                "must be configured together"
+            )
+        return self
 
 
 @lru_cache

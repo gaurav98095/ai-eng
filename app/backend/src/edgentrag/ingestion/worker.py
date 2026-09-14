@@ -10,6 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from edgentrag.core.config import Settings, load_settings
 from edgentrag.core.database import Database
+from edgentrag.embedding.client import (
+    EmbeddingBatch,
+    EmbeddingProvider,
+    EmbeddingServiceUnavailable,
+    HttpEmbeddingClient,
+)
 from edgentrag.ingestion.extraction import (
     DocumentExtractionError,
     chunk_text,
@@ -72,12 +78,40 @@ async def _update_session_status(
         session.status = "ready"
 
 
+async def _embed_chunks(
+    chunks: list[str],
+    *,
+    provider: EmbeddingProvider | None,
+    batch_size: int,
+) -> tuple[list[list[float] | None], str | None]:
+    """Embed bounded batches and check every response uses one model/shape."""
+    if provider is None:
+        return [None for _ in chunks], None
+
+    vectors: list[list[float]] = []
+    model_name: str | None = None
+    dimensions: int | None = None
+    for start in range(0, len(chunks), batch_size):
+        batch: EmbeddingBatch = await provider.embed(chunks[start : start + batch_size])
+        if model_name is None:
+            model_name = batch.model
+            dimensions = batch.dimensions
+        elif batch.model != model_name or batch.dimensions != dimensions:
+            raise EmbeddingServiceUnavailable(
+                "embedding model or dimensions changed between batches"
+            )
+        vectors.extend(batch.embeddings)
+
+    return vectors, model_name
+
+
 async def process_message(
     database: Database,
     storage: ObjectStorage,
     message: QueueMessage,
     *,
     settings: Settings,
+    embedding_provider: EmbeddingProvider | None = None,
 ) -> None:
     """Process one message; retryable infrastructure errors propagate."""
     try:
@@ -129,6 +163,12 @@ async def process_message(
             logger.warning("File %s failed validation: %s", job.file_id, exc)
             return
 
+        embeddings, embedding_model = await _embed_chunks(
+            chunks,
+            provider=embedding_provider,
+            batch_size=settings.embedding_batch_size,
+        )
+
         await database_session.execute(
             delete(DocumentChunk).where(DocumentChunk.session_file_id == job.file_id)
         )
@@ -137,6 +177,8 @@ async def process_message(
                 session_file_id=job.file_id,
                 chunk_index=chunk_index,
                 content=chunk,
+                embedding=embeddings[chunk_index],
+                embedding_model=embedding_model,
             )
             for chunk_index, chunk in enumerate(chunks)
         )
@@ -165,6 +207,13 @@ async def run_worker() -> None:
         region=settings.aws_region,
         endpoint_url=settings.aws_endpoint_url,
     )
+    embedding_provider = None
+    if settings.embedding_service_url is not None:
+        embedding_provider = HttpEmbeddingClient(
+            base_url=str(settings.embedding_service_url),
+            api_token=settings.embedding_api_token.get_secret_value(),
+            timeout_seconds=settings.embedding_request_timeout_seconds,
+        )
 
     try:
         while True:
@@ -186,6 +235,7 @@ async def run_worker() -> None:
                         storage,
                         message,
                         settings=settings,
+                        embedding_provider=embedding_provider,
                     )
                 except RetryableIngestionJob as exc:
                     logger.info("Leaving ingestion job for retry: %s", exc)
@@ -210,6 +260,8 @@ async def run_worker() -> None:
         await database.dispose()
         storage.close()
         queue.close()
+        if embedding_provider is not None:
+            await embedding_provider.aclose()
 
 
 if __name__ == "__main__":

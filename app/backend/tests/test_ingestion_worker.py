@@ -12,9 +12,14 @@ from sqlalchemy.orm import Session
 
 from edgentrag.core.config import Settings
 from edgentrag.core.database import Database
+from edgentrag.embedding.client import EmbeddingBatch
 from edgentrag.ingestion.models import DocumentChunk
 from edgentrag.ingestion.queue import QueueMessage
-from edgentrag.ingestion.worker import RetryableIngestionJob, process_message
+from edgentrag.ingestion.worker import (
+    RetryableIngestionJob,
+    _embed_chunks,
+    process_message,
+)
 from edgentrag.sessions.models import ChatSession, SessionFile
 from edgentrag.storage.s3 import ObjectTooLarge
 
@@ -29,6 +34,37 @@ class FakeObjectStorage:
         if len(self.content) > max_bytes:
             raise ObjectTooLarge("too large")
         return self.content
+
+
+class FakeEmbeddingProvider:
+    """Return a deterministic vector without making an HTTP request."""
+
+    def __init__(self) -> None:
+        self.batches: list[list[str]] = []
+
+    async def embed(self, texts: list[str]) -> EmbeddingBatch:
+        self.batches.append(texts)
+        return EmbeddingBatch(
+            model="test-embedding-model",
+            dimensions=2,
+            embeddings=[[1.0, 0.0] for _ in texts],
+        )
+
+
+def test_worker_sends_chunks_to_embedding_service_in_bounded_batches() -> None:
+    provider = FakeEmbeddingProvider()
+
+    vectors, model_name = asyncio.run(
+        _embed_chunks(
+            ["first", "second", "third"],
+            provider=provider,
+            batch_size=2,
+        )
+    )
+
+    assert provider.batches == [["first", "second"], ["third"]]
+    assert vectors == [[1.0, 0.0], [1.0, 0.0], [1.0, 0.0]]
+    assert model_name == "test-embedding-model"
 
 
 def migrate_database(database_url: str) -> None:
@@ -75,7 +111,10 @@ def test_worker_persists_chunks_and_marks_session_ready(tmp_path) -> None:
         environment="test",
         database_url=database_url,
         max_text_extract_bytes=1024,
+        embedding_service_url="https://embedding.example.test",
+        embedding_api_token="test-token",
     )
+    embedding_provider = FakeEmbeddingProvider()
 
     async def check_publish_race() -> None:
         with pytest.raises(RetryableIngestionJob):
@@ -84,6 +123,7 @@ def test_worker_persists_chunks_and_marks_session_ready(tmp_path) -> None:
                 FakeObjectStorage(content),
                 message,
                 settings=settings,
+                embedding_provider=embedding_provider,
             )
 
     asyncio.run(check_publish_race())
@@ -103,6 +143,7 @@ def test_worker_persists_chunks_and_marks_session_ready(tmp_path) -> None:
             FakeObjectStorage(content),
             message,
             settings=settings,
+            embedding_provider=embedding_provider,
         )
     )
 
@@ -126,6 +167,8 @@ def test_worker_persists_chunks_and_marks_session_ready(tmp_path) -> None:
                 chunks[0].content
                 == "# A useful note\n\nThis text should become a searchable chunk."
             )
+            assert chunks[0].embedding == [1.0, 0.0]
+            assert chunks[0].embedding_model == "test-embedding-model"
     finally:
         engine.dispose()
         asyncio.run(database.dispose())

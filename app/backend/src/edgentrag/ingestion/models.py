@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -17,7 +18,7 @@ from edgentrag.core.models import Base
 
 
 class DocumentChunk(Base):
-    """Extracted text stored in deterministic, searchable file chunks."""
+    """Extracted text and optional model vector for one file chunk."""
 
     __tablename__ = "document_chunks"
     __table_args__ = (
@@ -44,6 +45,8 @@ class DocumentChunk(Base):
     )
     chunk_index: Mapped[int] = mapped_column(nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

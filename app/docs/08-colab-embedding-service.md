@@ -5,9 +5,8 @@ with Sentence Transformers. It is designed to run separately from FastAPI so
 the API and ingestion worker do not need to load a machine-learning model or
 occupy a Colab GPU.
 
-At this stage, the service is standalone: the ingestion worker still saves
-plain-text chunks, and nothing calls this endpoint automatically. Connecting
-the worker to Colab and saving vectors is the next component.
+The service is standalone in this component. Component 9 connects the
+ingestion worker to Colab and saves returned vectors next to their chunks.
 
 ## Why a separate service?
 
@@ -168,7 +167,8 @@ repository root, run:
 .venv/bin/pytest app/backend/tests/test_embedding_app.py
 ~~~
 
-This component does not yet expose the Colab port to the public internet. Do
-not expose port 8001 without a private tunnel or equivalent access control.
-The following component will configure the backend caller and securely connect
-the worker to this service.
+The FastAPI process listens inside the Colab runtime; the notebook
+`app/colab_embedding_service.ipynb` can create a temporary Cloudflare Quick
+Tunnel for development tests. That public URL changes on restart and is not a
+production hosting setup. Component 9 configures the local worker to call the
+service and persists returned vectors.

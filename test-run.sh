@@ -109,6 +109,11 @@ if [[ "$API_READY" != "true" ]]; then
 fi
 
 echo "Starting the ingestion worker..."
+if [[ -n "${EDGENTRAG_EMBEDDING_SERVICE_URL:-}" ]]; then
+  echo "Chunk embeddings are enabled through the configured Colab service."
+else
+  echo "No embedding service configured; testing text-only ingestion."
+fi
 "$PYTHON" -m edgentrag.ingestion.worker >"$WORKER_LOG" 2>&1 &
 WORKER_PID=$!
 
@@ -169,8 +174,9 @@ async def main():
     async with database.sessions() as session:
         status=await session.scalar(select(SessionFile.status).where(SessionFile.id==sys.argv[1]))
         count=await session.scalar(select(func.count()).select_from(DocumentChunk).where(DocumentChunk.session_file_id==sys.argv[1]))
+        embedded=await session.scalar(select(func.count()).select_from(DocumentChunk).where(DocumentChunk.session_file_id==sys.argv[1], DocumentChunk.embedding.is_not(None)))
     await database.dispose()
-    print("{}:{}".format(status or "missing", count or 0))
+    print("{}:{}:{}".format(status or "missing", count or 0, embedded or 0))
 
 asyncio.run(main())
 ' "$FILE_ID")"
@@ -193,7 +199,17 @@ if [[ "$WORKER_RESULT" != ready:* ]]; then
 fi
 
 CHUNK_COUNT="${WORKER_RESULT#ready:}"
+EMBEDDED_COUNT="${CHUNK_COUNT#*:}"
+CHUNK_COUNT="${CHUNK_COUNT%%:*}"
+if [[ -n "${EDGENTRAG_EMBEDDING_SERVICE_URL:-}" && "$EMBEDDED_COUNT" != "$CHUNK_COUNT" ]]; then
+  echo "Expected an embedding for each chunk, but got ${EMBEDDED_COUNT}/${CHUNK_COUNT}. Worker output:" >&2
+  cat "$WORKER_LOG" >&2
+  exit 1
+fi
 echo "Success: the document was uploaded, verified, and processed into ${CHUNK_COUNT} chunk(s)."
+if [[ -n "${EDGENTRAG_EMBEDDING_SERVICE_URL:-}" ]]; then
+  echo "Persisted embeddings: ${EMBEDDED_COUNT}/${CHUNK_COUNT}."
+fi
 echo "Session: ${SESSION_ID}"
 echo "File: ${FILE_ID} (${FILE_NAME})"
 echo "The temporary API and worker will now shut down."
