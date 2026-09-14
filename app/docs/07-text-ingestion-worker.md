@@ -96,5 +96,6 @@ The tests cover UTF-8 validation, chunk overlap, size limits, migration shape,
 and a worker run that persists chunks and updates file/session status. They use
 temporary SQLite databases and fake storage, so they do not need Floci.
 
-The next component can create embeddings from these stored chunks and add
-vector search.
+The next component adds a separate, authenticated embedding service for
+Colab. A later component will connect it to these stored chunks and add vector
+search.
