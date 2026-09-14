@@ -177,6 +177,27 @@ chunk count. Stop it with Ctrl+C when you are done.
 PDF, Office, audio, and video parsers are not implemented yet; upload targets
 currently accept only `.md` and `.txt` files.
 
+## 9. Search the ingested document
+
+To include embeddings and search, configure
+`EDGENTRAG_EMBEDDING_SERVICE_URL` and `EDGENTRAG_EMBEDDING_API_TOKEN` for both
+the API and worker **before starting them and ingesting the file**. Use the
+current Colab tunnel URL and shared token as described in
+[Component 10](app/docs/10-semantic-search.md). Keep Colab running.
+
+Once the worker has saved embeddings and marked the file ready:
+
+~~~bash
+curl -i -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/search" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"How is the FastAPI application started?","top_k":3}'
+~~~
+
+Expect `200` with `matches` containing source text, filenames, chunk indices,
+and cosine scores. `409` means there are no ready compatible embeddings; older
+text-only documents need a fresh upload with embeddings enabled. `503` means
+to check the main API's embedding configuration and the running Colab service.
+
 ## FastAPI `/docs` alternative
 
 You can perform the API steps in `/docs` instead of the API `curl` commands:
@@ -188,5 +209,7 @@ You can perform the API steps in `/docs` instead of the API `curl` commands:
 - Use `curl --upload-file` from Step 6 to PUT the local file bytes to the
   returned URL. `/docs` cannot read a path from your computer.
 - Use `POST /sessions/{session_id}/uploads/{file_id}/complete` to confirm it.
+- After ingestion finishes with embeddings enabled, use
+  `POST /sessions/{session_id}/search` with a question and `top_k`.
 
 The same Floci and credentials requirements apply whichever client you use.

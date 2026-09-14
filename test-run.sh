@@ -63,6 +63,26 @@ if actual != expected:
 print("Floci bucket and SQS queue settings look good.")
 '
 
+# Use the same effective settings as the worker, including app/backend/.env.
+PIPELINE_SETTINGS="$("$PYTHON" -c '
+import math,sys
+from pathlib import Path
+from edgentrag.core.config import Settings
+from edgentrag.ingestion.extraction import chunk_text
+
+settings=Settings()
+enabled=settings.embedding_service_url is not None
+batches=math.ceil(len(chunk_text(Path(sys.argv[1]).read_text())) / settings.embedding_batch_size)
+worker_budget=math.ceil(batches * settings.embedding_request_timeout_seconds + 60) if enabled else 30
+print(int(enabled), worker_budget, math.ceil(settings.embedding_request_timeout_seconds + 10))
+' "$FILE_PATH")"
+read -r EMBEDDING_ENABLED DEFAULT_WORKER_WAIT_SECONDS SEARCH_WAIT_SECONDS <<<"$PIPELINE_SETTINGS"
+WORKER_WAIT_SECONDS="${TEST_WORKER_TIMEOUT_SECONDS:-$DEFAULT_WORKER_WAIT_SECONDS}"
+if [[ ! "$WORKER_WAIT_SECONDS" =~ ^[1-9][0-9]{0,5}$ ]]; then
+  echo "TEST_WORKER_TIMEOUT_SECONDS must be a positive integer of at most six digits." >&2
+  exit 1
+fi
+
 if ! curl --connect-timeout 2 --max-time 4 -sS -o /dev/null \
   "http://localhost:4566"; then
   echo "Floci is not reachable at http://localhost:4566. Check its Docker port mapping." >&2
@@ -109,7 +129,7 @@ if [[ "$API_READY" != "true" ]]; then
 fi
 
 echo "Starting the ingestion worker..."
-if [[ -n "${EDGENTRAG_EMBEDDING_SERVICE_URL:-}" ]]; then
+if [[ "$EMBEDDING_ENABLED" == "1" ]]; then
   echo "Chunk embeddings are enabled through the configured Colab service."
 else
   echo "No embedding service configured; testing text-only ingestion."
@@ -158,9 +178,11 @@ if result.get("status") != "uploaded" or result.get("ingestion_job_enqueued") is
     raise SystemExit("Upload confirmation response did not indicate a queued job")
 ' <<<"$COMPLETE_RESPONSE"
 
-echo "Waiting for the worker to persist extracted text chunks..."
+echo "Waiting up to ${WORKER_WAIT_SECONDS} seconds for ingestion..."
 WORKER_RESULT=""
-for attempt in {1..30}; do
+WORKER_DEADLINE=$((SECONDS + WORKER_WAIT_SECONDS))
+LAST_WORKER_RESULT=""
+while (( SECONDS < WORKER_DEADLINE )); do
   WORKER_RESULT="$("$PYTHON" -c '
 import asyncio,sys
 from sqlalchemy import func,select
@@ -174,12 +196,16 @@ async def main():
     async with database.sessions() as session:
         status=await session.scalar(select(SessionFile.status).where(SessionFile.id==sys.argv[1]))
         count=await session.scalar(select(func.count()).select_from(DocumentChunk).where(DocumentChunk.session_file_id==sys.argv[1]))
-        embedded=await session.scalar(select(func.count()).select_from(DocumentChunk).where(DocumentChunk.session_file_id==sys.argv[1], DocumentChunk.embedding.is_not(None)))
+        embedded=await session.scalar(select(func.count()).select_from(DocumentChunk).where(DocumentChunk.session_file_id==sys.argv[1], DocumentChunk.embedding_model.is_not(None), DocumentChunk.embedding.is_not(None)))
     await database.dispose()
     print("{}:{}:{}".format(status or "missing", count or 0, embedded or 0))
 
 asyncio.run(main())
 ' "$FILE_ID")"
+  if [[ "$WORKER_RESULT" != "$LAST_WORKER_RESULT" ]]; then
+    printf 'Ingestion status: %s (status:chunks:embeddings)\n' "$WORKER_RESULT"
+    LAST_WORKER_RESULT="$WORKER_RESULT"
+  fi
   case "$WORKER_RESULT" in
     ready:*) break ;;
     failed:*) echo "Worker marked the file failed. Worker output:" >&2; cat "$WORKER_LOG" >&2; exit 1 ;;
@@ -193,7 +219,7 @@ asyncio.run(main())
 done
 
 if [[ "$WORKER_RESULT" != ready:* ]]; then
-  echo "The worker did not finish within 30 seconds. Worker output:" >&2
+  echo "The worker did not finish within ${WORKER_WAIT_SECONDS} seconds. Worker output:" >&2
   cat "$WORKER_LOG" >&2
   exit 1
 fi
@@ -201,14 +227,36 @@ fi
 CHUNK_COUNT="${WORKER_RESULT#ready:}"
 EMBEDDED_COUNT="${CHUNK_COUNT#*:}"
 CHUNK_COUNT="${CHUNK_COUNT%%:*}"
-if [[ -n "${EDGENTRAG_EMBEDDING_SERVICE_URL:-}" && "$EMBEDDED_COUNT" != "$CHUNK_COUNT" ]]; then
+if [[ "$CHUNK_COUNT" == "0" ]]; then
+  echo "The worker returned ready without persisting any chunks." >&2
+  exit 1
+fi
+if [[ "$EMBEDDING_ENABLED" == "1" && "$EMBEDDED_COUNT" != "$CHUNK_COUNT" ]]; then
   echo "Expected an embedding for each chunk, but got ${EMBEDDED_COUNT}/${CHUNK_COUNT}. Worker output:" >&2
   cat "$WORKER_LOG" >&2
   exit 1
 fi
 echo "Success: the document was uploaded, verified, and processed into ${CHUNK_COUNT} chunk(s)."
-if [[ -n "${EDGENTRAG_EMBEDDING_SERVICE_URL:-}" ]]; then
+if [[ "$EMBEDDING_ENABLED" == "1" ]]; then
   echo "Persisted embeddings: ${EMBEDDED_COUNT}/${CHUNK_COUNT}."
+  echo "Searching the uploaded document..."
+  SEARCH_RESPONSE="$(curl --connect-timeout 5 --max-time "$SEARCH_WAIT_SECONDS" -fsS \
+    -X POST "${API_BASE_URL}/sessions/${SESSION_ID}/search" \
+    -H 'Content-Type: application/json' \
+    -d '{"query":"How is the FastAPI application started?","top_k":3}')"
+  "$PYTHON" -c '
+import json,sys
+result=json.load(sys.stdin)
+matches=result.get("matches", [])
+if result.get("session_id") != sys.argv[1] or not matches:
+    raise SystemExit("Search did not return matches for the test session")
+if any(match["file_id"] != sys.argv[2] for match in matches):
+    raise SystemExit("Search returned a file outside the test upload")
+for match in matches:
+    print("Match: {} chunk {} (score {:.3f})".format(match["filename"], match["chunk_index"], match["score"]))
+' "$SESSION_ID" "$FILE_ID" <<<"$SEARCH_RESPONSE"
+else
+  echo "Search skipped: configure the embedding service URL and token to test retrieval."
 fi
 echo "Session: ${SESSION_ID}"
 echo "File: ${FILE_ID} (${FILE_NAME})"

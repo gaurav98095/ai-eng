@@ -9,9 +9,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from edgentrag.api.routes.health import router as health_router
+from edgentrag.api.routes.search import router as search_router
 from edgentrag.api.routes.sessions import router as sessions_router
 from edgentrag.core.config import Settings, load_settings
 from edgentrag.core.database import Database
+from edgentrag.embedding.client import HttpEmbeddingClient
 from edgentrag.ingestion.queue import SQSIngestionQueue
 from edgentrag.storage.s3 import S3ObjectStorage
 
@@ -34,9 +36,18 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
             region=app_settings.aws_region,
             endpoint_url=app_settings.aws_endpoint_url,
         )
+        app.state.embedding_provider = None
         try:
+            if app_settings.embedding_service_url is not None:
+                app.state.embedding_provider = HttpEmbeddingClient(
+                    base_url=str(app_settings.embedding_service_url),
+                    api_token=app_settings.embedding_api_token.get_secret_value(),
+                    timeout_seconds=app_settings.embedding_request_timeout_seconds,
+                )
             yield
         finally:
+            if app.state.embedding_provider is not None:
+                await app.state.embedding_provider.aclose()
             await app.state.database.dispose()
             app.state.object_storage.close()
             app.state.ingestion_queue.close()
@@ -50,6 +61,7 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
     app.state.settings = app_settings
     app.include_router(health_router)
     app.include_router(sessions_router)
+    app.include_router(search_router)
     return app
 
 

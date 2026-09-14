@@ -16,6 +16,12 @@ cp app/backend/.env.example app/backend/.env
 
 Open http://127.0.0.1:8000/docs to inspect the generated API documentation.
 
+Semantic search is available at `POST /sessions/{session_id}/search` after
+documents have been ingested with embeddings enabled. See the step-by-step
+[Component 10 tutorial](../docs/10-semantic-search.md) for configuration and
+examples. From the repository root, `./test-run.sh` also exercises search when
+the embedding URL and token are configured.
+
 Run the quality checks:
 
 ~~~bash

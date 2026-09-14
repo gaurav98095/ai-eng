@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     embedding_api_token: SecretStr = SecretStr("")
     embedding_batch_size: int = Field(default=32, gt=0, le=64)
     embedding_request_timeout_seconds: float = Field(default=180, gt=0, le=600)
+    search_max_chunks: int = Field(default=5000, ge=1, le=50000)
 
     @model_validator(mode="after")
     def validate_embedding_configuration(self) -> "Settings":

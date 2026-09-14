@@ -117,4 +117,5 @@ The endpoint URL from a Quick Tunnel changes when Colab/tunnel restarts, so
 update the local variable each time. Colab Quick Tunnels are for development,
 not durable hosting. Also, document chunks are sent to the Colab runtime; only
 send documents you are allowed to process there. This component stores vectors
-but does not perform vector search yet—that is the next component.
+but does not perform vector search itself. Continue with
+[Component 10: semantic search](10-semantic-search.md) to query these vectors.
