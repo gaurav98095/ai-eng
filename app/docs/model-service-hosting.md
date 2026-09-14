@@ -63,7 +63,13 @@ matching provider URL for each service. Refresh Colab URLs when tunnels restart.
 local API and worker after each configuration change; their settings are
 snapshotted at startup. A shell-exported setting overrides the `.env` value.
 `test-run.sh` also reads the resolved settings, so its embedding check follows
-the selected profile.
+the selected profile. If a generation URL is configured, it posts a small test
+prompt to `/generate` as well. Export the matching token before running it:
+
+```sh
+export EDGENTRAG_GENERATION_API_TOKEN='your-generation-token'
+./test-run.sh
+```
 
 Selecting Lightning for embedding requires its URL and never falls back to a
 Colab URL. Unselected URLs are validated but are not used for requests.
@@ -75,9 +81,10 @@ configured, otherwise the legacy `EDGENTRAG_EMBEDDING_SERVICE_URL`. This preserv
 existing installations, including text-only ingestion when URL and token are
 both unset. The local `.env` now contains both switches; credentials are preserved.
 
-The generation profile URL is optional and reserved for the next answer
-integration module. The local backend does not call generation yet. Test
-`/generate` directly with its own bearer token as shown in the notebook.
+The generation profile URL is optional because the local backend does not yet
+call generation as part of chat. When configured, `test-run.sh` independently
+tests the generation service with its own bearer token; the notebook also
+verifies `/generate` directly.
 
 Switching hosting does not migrate vectors or change model names. Keep the
 same embedding model when reusing stored vectors; otherwise re-ingest the
