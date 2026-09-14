@@ -95,6 +95,11 @@ HTTP process is alive, not that inference has been verified. A successful
 
 ## 5. Run the Colab notebook
 
+The same notebook also supports Lightning AI: set `use_colab_for_llm = False`
+for generation, and `use_colab_for_embedding = False` for embeddings.
+See [model-service hosting](model-service-hosting.md) for the Studio setup and
+local backend host-profile configuration. The instructions below cover Colab.
+
 Open [colab_model_services.ipynb](../colab_model_services.ipynb) in
 Colab. This single notebook runs both embedding and generation; you do not
 need a second active notebook. Run its cells in order:

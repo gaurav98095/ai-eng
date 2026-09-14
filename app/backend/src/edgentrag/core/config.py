@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     upload_url_ttl_seconds: int = Field(default=900, gt=0, le=604800)
     max_upload_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
     max_text_extract_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
+    use_colab_for_embedding: bool = True
+    use_colab_for_llm: bool = True
+    colab_embedding_service_url: AnyHttpUrl | None = None
+    colab_generation_service_url: AnyHttpUrl | None = None
+    lightning_embedding_service_url: AnyHttpUrl | None = None
+    lightning_generation_service_url: AnyHttpUrl | None = None
+    generation_service_url: AnyHttpUrl | None = None
     embedding_service_url: AnyHttpUrl | None = None
     embedding_api_token: SecretStr = SecretStr("")
     embedding_batch_size: int = Field(default=32, gt=0, le=64)
@@ -41,6 +48,24 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_embedding_configuration(self) -> "Settings":
         """Require a URL and bearer token together when embeddings are enabled."""
+        if self.use_colab_for_embedding:
+            # Preserve pre-profile Colab configuration for existing installations.
+            self.embedding_service_url = (
+                self.colab_embedding_service_url or self.embedding_service_url
+            )
+        else:
+            if self.lightning_embedding_service_url is None:
+                raise ValueError(
+                    "lightning_embedding_service_url is required when "
+                    "use_colab_for_embedding is false"
+                )
+            self.embedding_service_url = self.lightning_embedding_service_url
+        # Generation is not consumed by the backend yet; its URL stays optional.
+        self.generation_service_url = (
+            self.colab_generation_service_url
+            if self.use_colab_for_llm
+            else self.lightning_generation_service_url
+        )
         has_url = self.embedding_service_url is not None
         has_token = bool(self.embedding_api_token.get_secret_value())
         if has_url != has_token:
