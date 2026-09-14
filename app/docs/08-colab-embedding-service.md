@@ -168,7 +168,8 @@ repository root, run:
 ~~~
 
 The FastAPI process listens inside the Colab runtime; the notebook
-`app/colab_embedding_service.ipynb` can create a temporary Cloudflare Quick
+`app/colab_model_services.ipynb` runs both model APIs in one notebook and can
+create a temporary Cloudflare Quick
 Tunnel for development tests. That public URL changes on restart and is not a
 production hosting setup. Component 9 configures the local worker to call the
 service and persists returned vectors.

@@ -20,6 +20,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+generation = [
+  "transformers>=4.45,<5",
+  "torch>=2.6,<3",
+  "sentencepiece>=0.2,<1",
+]
 embedding = [
   "sentence-transformers>=3,<6",
 ]

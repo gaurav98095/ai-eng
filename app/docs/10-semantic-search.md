@@ -112,7 +112,7 @@ existing columns.
 
 ## 6. Run and test it
 
-Start Colab using `app/colab_embedding_service.ipynb` and test its `/embed`
+Start Colab using `app/colab_model_services.ipynb` and test its `/embed`
 endpoint once to load the model. Keep the runtime and tunnel running. At the
 repository root, set the current URL and enter the shared token without echo:
 
@@ -184,5 +184,7 @@ download or network call is needed.
 This is a bounded exhaustive search over JSON vectors. By default it accepts
 up to 5,000 candidate chunks per session (`EDGENTRAG_SEARCH_MAX_CHUNKS`). Larger
 sessions return 413 instead of silently searching only the first part. A
-database vector index is the next scaling step. The next tutorial component
-will use the returned source chunks as context for answer generation.
+database vector index is the next scaling step.
+[Module 11](11-colab-generation-service.md) first builds the standalone
+generation service. The following module will connect it to these source
+chunks for answer generation.
