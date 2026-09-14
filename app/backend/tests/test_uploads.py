@@ -88,8 +88,8 @@ def test_upload_request_returns_signed_targets_and_persists_metadata(tmp_path) -
             json={
                 "files": [
                     {
-                        "filename": "notes.pdf",
-                        "content_type": "application/pdf",
+                        "filename": "notes.md",
+                        "content_type": "text/markdown",
                         "size_bytes": 4096,
                     }
                 ]
@@ -98,12 +98,12 @@ def test_upload_request_returns_signed_targets_and_persists_metadata(tmp_path) -
 
     assert response.status_code == 201
     target = response.json()["targets"][0]
-    assert target["filename"] == "notes.pdf"
-    assert target["content_type"] == "application/pdf"
+    assert target["filename"] == "notes.md"
+    assert target["content_type"] == "text/markdown"
     assert target["expires_in"] == 600
     assert target["upload_url"].startswith("https://storage.test/uploads/")
-    assert storage.requests[0]["content_type"] == "application/pdf"
-    assert "notes.pdf" not in str(storage.requests[0]["key"])
+    assert storage.requests[0]["content_type"] == "text/markdown"
+    assert "notes.md" not in str(storage.requests[0]["key"])
 
     engine = create_engine(f"sqlite:///{database_path}")
     try:
@@ -113,7 +113,7 @@ def test_upload_request_returns_signed_targets_and_persists_metadata(tmp_path) -
             )
             assert file_record is not None
             assert file_record.session_id == session_id
-            assert file_record.filename == "notes.pdf"
+            assert file_record.filename == "notes.md"
             assert file_record.status == "awaiting_upload"
     finally:
         engine.dispose()
@@ -167,8 +167,8 @@ def test_upload_rejects_files_larger_than_the_configured_limit(tmp_path) -> None
             json={
                 "files": [
                     {
-                        "filename": "big.pdf",
-                        "content_type": "application/pdf",
+                        "filename": "big.md",
+                        "content_type": "text/markdown",
                         "size_bytes": 101,
                     }
                 ]
@@ -196,8 +196,8 @@ def test_upload_completion_checks_s3_then_queues_once(tmp_path) -> None:
             json={
                 "files": [
                     {
-                        "filename": "notes.pdf",
-                        "content_type": "application/pdf",
+                        "filename": "notes.md",
+                        "content_type": "text/markdown",
                         "size_bytes": 4096,
                     }
                 ]
@@ -212,7 +212,7 @@ def test_upload_completion_checks_s3_then_queues_once(tmp_path) -> None:
         object_key = str(storage.requests[0]["key"])
         storage.metadata_by_key[object_key] = ObjectMetadata(
             size_bytes=4095,
-            content_type="application/pdf",
+            content_type="text/markdown",
         )
         wrong_size = client.post(complete_url)
         assert wrong_size.status_code == 422
@@ -220,7 +220,7 @@ def test_upload_completion_checks_s3_then_queues_once(tmp_path) -> None:
 
         storage.metadata_by_key[object_key] = ObjectMetadata(
             size_bytes=4096,
-            content_type="application/pdf",
+            content_type="text/markdown",
         )
         queue.unavailable = True
         unavailable = client.post(complete_url)

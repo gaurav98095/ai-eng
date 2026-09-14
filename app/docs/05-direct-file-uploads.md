@@ -26,8 +26,8 @@ After creating a session, request one or more upload targets:
 {
   "files": [
     {
-      "filename": "notes.pdf",
-      "content_type": "application/pdf",
+      "filename": "notes.md",
+      "content_type": "text/markdown",
       "size_bytes": 4096
     }
   ]
@@ -38,6 +38,9 @@ The API limits each request to 1–20 files, rejects path-like filenames and
 unsupported extensions, and compares the declared size with the configured
 maximum. It stores the filename for display, but constructs the S3 object key
 from server-generated IDs. User-provided names never become storage paths.
+
+At this stage only `.md` and `.txt` files have an implemented processor. Other
+file types are rejected until their parser components are added.
 
 The declared size and MIME type come from the client and are not proof of what
 the bytes contain. They are useful for limits and signing; the next component
@@ -138,7 +141,7 @@ Then request a target, replacing SESSION_ID:
 ~~~bash
 curl -X POST http://127.0.0.1:8000/sessions/SESSION_ID/uploads \
   -H 'Content-Type: application/json' \
-  -d '{"files":[{"filename":"notes.pdf","content_type":"application/pdf","size_bytes":4096}]}'
+  -d '{"files":[{"filename":"notes.md","content_type":"text/markdown","size_bytes":4096}]}'
 ~~~
 
 The response includes file_id, the temporary upload_url, and expires_in. To

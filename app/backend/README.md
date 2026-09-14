@@ -32,7 +32,7 @@ SESSION_ID=$(
 )
 curl -s -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/uploads" \
   -H 'Content-Type: application/json' \
-  -d '{"files":[{"filename":"notes.pdf","content_type":"application/pdf","size_bytes":4096}]}'
+  -d '{"files":[{"filename":"notes.md","content_type":"text/markdown","size_bytes":4096}]}'
 ~~~
 
 Real S3 upload URLs require EDGENTRAG_S3_BUCKET and AWS credentials from the

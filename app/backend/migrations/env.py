@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from edgentrag.core.config import load_settings
 from edgentrag.core.models import Base
+from edgentrag.ingestion import models as ingestion_models  # noqa: F401
 from edgentrag.sessions import models as session_models  # noqa: F401
 
 config = context.config

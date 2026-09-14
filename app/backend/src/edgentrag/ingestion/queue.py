@@ -1,6 +1,7 @@
 """SQS adapter for scheduling uploaded files for ingestion."""
 
 import json
+from dataclasses import dataclass
 from functools import cached_property
 from typing import Protocol
 
@@ -12,10 +13,27 @@ class QueueUnavailable(Exception):
     """Raised when the ingestion queue cannot accept a job."""
 
 
+@dataclass(frozen=True)
+class QueueMessage:
+    """SQS payload and receipt handle required to acknowledge delivery."""
+
+    body: str
+    receipt_handle: str
+
+
 class IngestionQueue(Protocol):
     """Small queue interface required by the upload-confirmation route."""
 
     def enqueue_file(self, *, session_id: str, file_id: str) -> None: ...
+
+    def receive_messages(
+        self,
+        *,
+        max_messages: int = 1,
+        wait_time_seconds: int = 20,
+    ) -> list[QueueMessage]: ...
+
+    def delete_message(self, *, receipt_handle: str) -> None: ...
 
 
 class SQSIngestionQueue:
@@ -58,6 +76,54 @@ class SQSIngestionQueue:
             )
         except (BotoCoreError, ClientError) as exc:
             raise QueueUnavailable("could not enqueue the uploaded file") from exc
+
+    def receive_messages(
+        self,
+        *,
+        max_messages: int = 1,
+        wait_time_seconds: int = 20,
+    ) -> list[QueueMessage]:
+        """Long-poll a bounded batch from SQS."""
+        if not self.queue_url:
+            raise QueueUnavailable("ingestion queue is not configured")
+        if not 1 <= max_messages <= 10:
+            raise ValueError("max_messages must be between 1 and 10")
+        if not 0 <= wait_time_seconds <= 20:
+            raise ValueError("wait_time_seconds must be between 0 and 20")
+
+        try:
+            response = self._client.receive_message(
+                QueueUrl=self.queue_url,
+                MaxNumberOfMessages=max_messages,
+                WaitTimeSeconds=wait_time_seconds,
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise QueueUnavailable("could not receive ingestion jobs") from exc
+
+        messages: list[QueueMessage] = []
+        for message in response.get("Messages", []):
+            try:
+                messages.append(
+                    QueueMessage(
+                        body=str(message["Body"]),
+                        receipt_handle=str(message["ReceiptHandle"]),
+                    )
+                )
+            except KeyError as exc:
+                raise QueueUnavailable("SQS returned an incomplete message") from exc
+        return messages
+
+    def delete_message(self, *, receipt_handle: str) -> None:
+        """Acknowledge a job only after it has been processed successfully."""
+        if not self.queue_url:
+            raise QueueUnavailable("ingestion queue is not configured")
+        try:
+            self._client.delete_message(
+                QueueUrl=self.queue_url,
+                ReceiptHandle=receipt_handle,
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise QueueUnavailable("could not acknowledge ingestion job") from exc
 
     def close(self) -> None:
         """Release the SDK connection pool if the client was used."""

@@ -17,6 +17,10 @@ class ObjectNotFound(Exception):
     """Raised when the requested object has not reached storage yet."""
 
 
+class ObjectTooLarge(Exception):
+    """Raised when a stored object exceeds the worker's safe read limit."""
+
+
 @dataclass(frozen=True)
 class ObjectMetadata:
     """Small subset of S3 metadata needed to validate an uploaded object."""
@@ -37,6 +41,8 @@ class ObjectStorage(Protocol):
     ) -> str: ...
 
     def get_object_metadata(self, *, key: str) -> ObjectMetadata: ...
+
+    def read_object(self, *, key: str, max_bytes: int) -> bytes: ...
 
 
 class S3ObjectStorage:
@@ -108,6 +114,24 @@ class S3ObjectStorage:
             raise StorageUnavailable(
                 "storage returned incomplete object metadata"
             ) from exc
+
+    def read_object(self, *, key: str, max_bytes: int) -> bytes:
+        """Read at most the configured byte limit plus one overflow byte."""
+        if not self.bucket:
+            raise StorageUnavailable("S3 bucket is not configured")
+        try:
+            response = self._client.get_object(Bucket=self.bucket, Key=key)
+            body = response["Body"]
+            try:
+                content = body.read(max_bytes + 1)
+            finally:
+                body.close()
+        except (BotoCoreError, ClientError, KeyError, OSError) as exc:
+            raise StorageUnavailable("could not download the uploaded object") from exc
+
+        if len(content) > max_bytes:
+            raise ObjectTooLarge("uploaded object exceeds the text extraction limit")
+        return content
 
     def close(self) -> None:
         """Release the client connection pool if this adapter was used."""

@@ -7,9 +7,11 @@ This walkthrough runs the pipeline currently implemented in the backend:
 3. PUT one Markdown file from `app/docs` directly to Floci.
 4. Confirm the upload; the API checks S3 metadata and enqueues the file IDs in
    SQS.
+5. Run the worker to validate the text, persist chunks, and mark the file
+   ready.
 
-The current pipeline ends when the job is queued. A worker to extract text and
-build a searchable index will be added in a later component.
+The current pipeline ends after storing text chunks. Embeddings and searchable
+vector retrieval will be added in later components.
 
 To run the full sequence automatically instead, open a terminal at the
 repository root and run `./test-run.sh`. The steps below show the individual
@@ -153,13 +155,27 @@ If the object is missing, confirmation returns `409`. A size or content-type
 mismatch returns `422`; those failures do not enqueue a job. A queue problem
 returns `503`, which usually means to check the queue URL and Floci connection.
 
-## 8. Verify the message in Floci
+## 8. Run the ingestion worker
 
-Open the Floci dashboard, select SQS queue `edgentrag-test-queue`, and refresh
-its details. Its approximate message count should increase. The message body
-contains the `session_id`, `file_id`, and schema version—not the document
-bytes. No worker currently consumes the queue, so the message should remain
-available until you remove or consume it.
+Open Terminal 3 at the repository root. Export the local Floci credentials and
+start the separate worker process:
+
+~~~bash
+cd /Users/gaurav/Desktop/ai-eng
+export AWS_ACCESS_KEY_ID=test
+export AWS_SECRET_ACCESS_KEY=test
+export AWS_DEFAULT_REGION=us-east-1
+.venv/bin/python -m edgentrag.ingestion.worker
+~~~
+
+The worker long-polls `edgentrag-test-queue`. For a valid Markdown file it
+downloads the bytes, checks UTF-8 and content type, stores extracted text in
+`document_chunks`, marks the file and session `ready`, and removes the SQS
+message after the database commit. Its terminal should log the file ID and
+chunk count. Stop it with Ctrl+C when you are done.
+
+PDF, Office, audio, and video parsers are not implemented yet; upload targets
+currently accept only `.md` and `.txt` files.
 
 ## FastAPI `/docs` alternative
 

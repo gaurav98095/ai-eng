@@ -98,5 +98,5 @@ acceptance, and the SQS adapter publishes IDs rather than file data. They use
 temporary SQLite databases and mocked AWS clients, so they do not require a
 running Floci instance.
 
-The next component can consume these jobs and begin extracting text from
-uploaded documents.
+Component 7 consumes these jobs and extracts text from Markdown/plain text
+documents into overlapping database chunks.
