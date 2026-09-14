@@ -168,8 +168,8 @@ repository root, run:
 ~~~
 
 The FastAPI process listens inside the Colab runtime; the notebook
-`app/colab_model_services.ipynb` runs both model APIs in one notebook and can
-create a temporary Cloudflare Quick
-Tunnel for development tests. That public URL changes on restart and is not a
-production hosting setup. Component 9 configures the local worker to call the
-service and persists returned vectors.
+`app/colab_model_services.ipynb` runs both model APIs and creates temporary
+Cloudflare Quick Tunnels for development tests. Those public URLs change on
+restart and are not a production hosting setup. For Lightning Studio hosting,
+use `app/lightning_model_services.ipynb`. Component 9 configures the local
+worker to call the service and persists returned vectors.
