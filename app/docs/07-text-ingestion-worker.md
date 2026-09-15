@@ -83,6 +83,10 @@ be invalid. S3/DB failures leave it for SQS redelivery. If a message arrives
 during the API's short window between sending it and committing the file's
 `uploaded` status, the worker leaves it for retry rather than discarding it.
 Already-ready or already-failed files are treated idempotently on redelivery.
+Concurrent deliveries may perform duplicate external work, but only the first
+terminal database transition replaces chunks and updates the parent session.
+There is no lease/claim protocol yet; multi-worker claiming and a dead-letter
+queue remain deferred.
 
 Invalid text (wrong MIME type, binary/NUL bytes, invalid UTF-8, empty text, or
 over the worker's byte limit) is marked `failed` and acknowledged so a

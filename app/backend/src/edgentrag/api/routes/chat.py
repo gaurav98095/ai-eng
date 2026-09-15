@@ -5,10 +5,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.concurrency import run_in_threadpool
 
 from edgentrag.api.dependencies import get_chat_queue, get_db_session
 from edgentrag.chat_queue import ChatQueue, ChatQueueUnavailable
+from edgentrag.sessions.chat import enqueue_turn
 from edgentrag.sessions.chat_schemas import ChatAccepted, ChatRequest, MessageResponse
 from edgentrag.sessions.models import ChatSession, Message
 
@@ -32,26 +32,18 @@ async def post_message(
     if session.status != "ready":
         raise HTTPException(status_code=409, detail="session has nothing indexed yet")
 
-    question = Message(
-        session_id=session_id, role="user", content=body.content, status="done"
-    )
-    answer = Message(session_id=session_id, role="assistant", status="pending")
-    database_session.add_all([question, answer])
-    await database_session.flush()
     try:
-        await run_in_threadpool(
-            chat_queue.enqueue_message,
+        message_id = await enqueue_turn(
+            database_session,
+            chat_queue,
             session_id=session_id,
-            message_id=answer.id,
-            question=body.content,
+            content=body.content,
         )
     except ChatQueueUnavailable as exc:
-        await database_session.rollback()
         raise HTTPException(
             status_code=503, detail="chat queue is temporarily unavailable"
         ) from exc
-    await database_session.commit()
-    return ChatAccepted(message_id=answer.id)
+    return ChatAccepted(message_id=message_id)
 
 
 @router.get("/{session_id}/chat", response_model=list[MessageResponse])

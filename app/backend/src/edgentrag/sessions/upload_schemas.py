@@ -13,7 +13,7 @@ class UploadFileSpec(BaseModel):
     """Metadata the API needs to create a file record and signed URL."""
 
     filename: Filename
-    content_type: ContentType = "application/octet-stream"
+    content_type: ContentType
     size_bytes: PositiveSize
 
     @field_validator("filename")

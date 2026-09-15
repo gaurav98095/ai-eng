@@ -7,12 +7,13 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from edgentrag.core.config import Settings
 from edgentrag.core.database import Database
-from edgentrag.embedding.client import EmbeddingBatch
+from edgentrag.embedding.client import EmbeddingBatch, EmbeddingServiceUnavailable
 from edgentrag.ingestion.models import DocumentChunk
 from edgentrag.ingestion.queue import QueueMessage
 from edgentrag.ingestion.worker import (
@@ -172,6 +173,113 @@ def test_worker_persists_chunks_and_marks_session_ready(tmp_path) -> None:
     finally:
         engine.dispose()
         asyncio.run(database.dispose())
+
+
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_concurrent_completions_are_idempotent_and_update_parent(tmp_path, duplicate):
+    url = f"sqlite+aiosqlite:///{tmp_path / 'concurrent.db'}"
+    migrate_database(url)
+
+    async def run():
+        database = Database(url)
+        both_embedding = asyncio.Event()
+
+        class BarrierProvider(FakeEmbeddingProvider):
+            async def embed(self, texts):
+                result = await super().embed(texts)
+                if len(self.batches) == 2:
+                    both_embedding.set()
+                await asyncio.wait_for(both_embedding.wait(), timeout=5)
+                return result
+
+        try:
+            async with database.sessions() as db:
+                db.add(ChatSession(id="s", status="processing"))
+                await db.flush()
+                for file_id in ["a"] if duplicate else ["a", "b"]:
+                    db.add(
+                        SessionFile(
+                            id=file_id,
+                            session_id="s",
+                            filename="a.txt",
+                            content_type="text/plain",
+                            size_bytes=4,
+                            object_key=file_id,
+                            status="uploaded",
+                        )
+                    )
+                await db.commit()
+            provider = BarrierProvider()
+            jobs = [
+                QueueMessage(
+                    body=json.dumps(
+                        {
+                            "schema_version": 1,
+                            "session_id": "s",
+                            "file_id": file_id,
+                        }
+                    ),
+                    receipt_handle=file_id,
+                )
+                for file_id in (["a", "a"] if duplicate else ["a", "b"])
+            ]
+            await asyncio.gather(
+                *(
+                    process_message(
+                        database,
+                        FakeObjectStorage(b"text"),
+                        job,
+                        settings=Settings(_env_file=None),
+                        embedding_provider=provider,
+                    )
+                    for job in jobs
+                )
+            )
+            async with database.sessions() as db:
+                assert (await db.get(ChatSession, "s")).status == "ready"
+                chunks = list(await db.scalars(select(DocumentChunk)))
+                assert len(chunks) == (1 if duplicate else 2)
+                chunk_ids = [chunk.id for chunk in chunks]
+            # Sequential redelivery must preserve chunk IDs as well as count.
+            await process_message(
+                database,
+                FakeObjectStorage(b"text"),
+                jobs[0],
+                settings=Settings(_env_file=None),
+                embedding_provider=provider,
+            )
+            async with database.sessions() as db:
+                assert list(await db.scalars(select(DocumentChunk.id))) == chunk_ids
+                await db.execute(delete(ChatSession).where(ChatSession.id == "s"))
+                await db.commit()
+                assert list(await db.scalars(select(SessionFile))) == []
+                assert list(await db.scalars(select(DocumentChunk))) == []
+                db.add(
+                    SessionFile(
+                        session_id="missing",
+                        filename="bad.txt",
+                        content_type="text/plain",
+                        size_bytes=1,
+                        object_key="bad",
+                    )
+                )
+                with pytest.raises(IntegrityError):
+                    await db.commit()
+                await db.rollback()
+        finally:
+            await database.dispose()
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("vectors", [[], [[1.0]], [[0.0, 0.0]]])
+def test_worker_rejects_malformed_provider_batches(vectors):
+    class InvalidProvider:
+        async def embed(self, texts):
+            return EmbeddingBatch(model="fake", dimensions=2, embeddings=vectors)
+
+    with pytest.raises(EmbeddingServiceUnavailable):
+        asyncio.run(_embed_chunks(["text"], provider=InvalidProvider(), batch_size=1))
 
 
 def test_worker_fails_a_document_larger_than_extraction_limit(tmp_path) -> None:

@@ -3,7 +3,6 @@
 from typing import Protocol
 
 import httpx
-from pydantic import ValidationError
 
 from edgentrag.generation.schemas import GenerateRequest, GenerateResponse
 
@@ -43,9 +42,7 @@ class HttpGenerationClient:
     async def generate(self, request: GenerateRequest) -> GenerateResponse:
         """Return validated generated text without leaking remote error bodies."""
         try:
-            response = await self._client.post(
-                "/generate", json=request.model_dump()
-            )
+            response = await self._client.post("/generate", json=request.model_dump())
             if response.status_code == 413:
                 raise GenerationInputTooLarge(
                     "the generated prompt exceeds the model service input limit"
@@ -54,7 +51,7 @@ class HttpGenerationClient:
             return GenerateResponse.model_validate(response.json())
         except GenerationInputTooLarge:
             raise
-        except (httpx.HTTPError, ValueError, ValidationError) as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             raise GenerationServiceUnavailable(
                 "generation service request failed"
             ) from exc

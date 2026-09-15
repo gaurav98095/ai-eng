@@ -22,6 +22,18 @@ documents have been ingested with embeddings enabled. See the step-by-step
 examples. From the repository root, `./test-run.sh` also exercises search when
 the embedding URL and token are configured.
 
+Grounded answers are available at `POST /sessions/{session_id}/answers` when a
+generation service URL and token are configured; see [Component 12](../docs/12-grounded-answers.md).
+Run the queued chat worker in a second process with:
+
+~~~bash
+.venv/bin/python -m edgentrag.chat.worker
+~~~
+
+It consumes accepted turns, calls the same retrieval and generation services,
+and persists the assistant message. The API remains acceptance-only (`202`),
+so clients can poll `GET /sessions/{session_id}/chat` for completion.
+
 Run the quality checks:
 
 ~~~bash

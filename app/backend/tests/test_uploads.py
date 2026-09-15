@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
@@ -12,7 +13,7 @@ from edgentrag.api.app import create_app
 from edgentrag.api.dependencies import get_ingestion_queue, get_object_storage
 from edgentrag.core.config import Settings
 from edgentrag.ingestion.queue import QueueUnavailable
-from edgentrag.sessions.models import SessionFile
+from edgentrag.sessions.models import ChatSession, SessionFile
 from edgentrag.storage.s3 import ObjectMetadata, ObjectNotFound
 
 
@@ -115,6 +116,7 @@ def test_upload_request_returns_signed_targets_and_persists_metadata(tmp_path) -
             assert file_record.session_id == session_id
             assert file_record.filename == "notes.md"
             assert file_record.status == "awaiting_upload"
+            assert database_session.get(ChatSession, session_id).status == "processing"
     finally:
         engine.dispose()
 
@@ -230,6 +232,20 @@ def test_upload_completion_checks_s3_then_queues_once(tmp_path) -> None:
         queue.unavailable = False
         completed = client.post(complete_url)
         repeated = client.post(complete_url)
+        engine = create_engine(f"sqlite:///{database_path}")
+        try:
+            for lifecycle in ("processing", "ready", "failed"):
+                with Session(engine) as db:
+                    db.get(SessionFile, target["file_id"]).status = lifecycle
+                    db.commit()
+                retry = client.post(complete_url)
+                assert retry.status_code == 202
+                assert retry.json()["status"] == lifecycle
+            with Session(engine) as db:
+                db.get(SessionFile, target["file_id"]).status = "uploaded"
+                db.commit()
+        finally:
+            engine.dispose()
 
     assert completed.status_code == 202
     assert completed.json()["status"] == "uploaded"
@@ -249,3 +265,28 @@ def test_upload_completion_checks_s3_then_queues_once(tmp_path) -> None:
             assert file_record.status == "uploaded"
     finally:
         engine.dispose()
+
+
+@pytest.mark.parametrize("content_type", ["application/octet-stream", "text/plain"])
+def test_upload_rejects_wrong_markdown_mime_before_signing(tmp_path, content_type):
+    url = f"sqlite+aiosqlite:///{tmp_path / 'mime.db'}"
+    migrate_database(url)
+    storage = FakeObjectStorage()
+    app = create_app(settings=Settings(environment="test", database_url=url))
+    app.dependency_overrides[get_object_storage] = lambda: storage
+    with TestClient(app) as client:
+        session_id = client.post("/sessions").json()["session_id"]
+        response = client.post(
+            f"/sessions/{session_id}/uploads",
+            json={
+                "files": [
+                    {
+                        "filename": "notes.md",
+                        "content_type": content_type,
+                        "size_bytes": 10,
+                    }
+                ]
+            },
+        )
+    assert response.status_code == 415
+    assert storage.requests == []

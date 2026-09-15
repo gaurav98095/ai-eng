@@ -16,6 +16,7 @@ from edgentrag.embedding.client import (
     EmbeddingServiceUnavailable,
     HttpEmbeddingClient,
 )
+from edgentrag.embedding.schemas import validate_embedding_batch
 from edgentrag.ingestion.extraction import (
     DocumentExtractionError,
     chunk_text,
@@ -28,6 +29,7 @@ from edgentrag.ingestion.queue import (
     SQSIngestionQueue,
 )
 from edgentrag.sessions.models import ChatSession, SessionFile
+from edgentrag.sessions.state import lock_session
 from edgentrag.storage.s3 import (
     ObjectStorage,
     ObjectTooLarge,
@@ -85,6 +87,8 @@ async def _embed_chunks(
     batch_size: int,
 ) -> tuple[list[list[float] | None], str | None]:
     """Embed bounded batches and check every response uses one model/shape."""
+    if batch_size <= 0:
+        raise ValueError("embedding batch size must be positive")
     if provider is None:
         return [None for _ in chunks], None
 
@@ -93,6 +97,10 @@ async def _embed_chunks(
     dimensions: int | None = None
     for start in range(0, len(chunks), batch_size):
         batch: EmbeddingBatch = await provider.embed(chunks[start : start + batch_size])
+        try:
+            validate_embedding_batch(batch, len(chunks[start : start + batch_size]))
+        except ValueError as exc:
+            raise EmbeddingServiceUnavailable(str(exc)) from exc
         if model_name is None:
             model_name = batch.model
             dimensions = batch.dimensions
@@ -120,6 +128,7 @@ async def process_message(
         raise InvalidIngestionJob("message body is not a valid ingestion job") from exc
 
     async with database.sessions() as database_session:
+        await lock_session(database_session, job.session_id)
         file_record = await database_session.get(SessionFile, job.file_id)
         if file_record is None or file_record.session_id != job.session_id:
             raise InvalidIngestionJob("job does not match a stored session file")
@@ -154,6 +163,10 @@ async def process_message(
             )
             chunks = chunk_text(extracted_text)
         except (DocumentExtractionError, ObjectTooLarge) as exc:
+            await lock_session(database_session, job.session_id)
+            await database_session.refresh(file_record)
+            if file_record.status in {"ready", "failed"}:
+                return
             file_record.status = "failed"
             await _update_session_status(
                 database_session,
@@ -169,6 +182,10 @@ async def process_message(
             batch_size=settings.embedding_batch_size,
         )
 
+        await lock_session(database_session, job.session_id)
+        await database_session.refresh(file_record)
+        if file_record.status in {"ready", "failed"}:
+            return
         await database_session.execute(
             delete(DocumentChunk).where(DocumentChunk.session_file_id == job.file_id)
         )

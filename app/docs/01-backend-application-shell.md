@@ -6,17 +6,17 @@ belongs where it does, and leaves the app runnable and tested.
 
 ## The roadmap
 
-1. **Backend application shell** — the current tutorial.
+1. **Backend application shell** — complete.
 2. Backend settings and dependency wiring.
 3. Database connection and readiness.
 4. First domain model, migration, and session API.
 5. File-upload API and S3 storage adapter.
 6. Queue contracts and ingestion worker.
 7. Colab broker and model-service client.
-8. Chat API and worker.
-9. React application shell.
-10. React service connection screen.
-11. Upload, processing-status, and chat UI components.
+8. Chat API and worker — complete ([Component 14](14-chat-worker.md)).
+9. React application shell — not present in this replica yet.
+10. React service connection screen — not present in this replica yet.
+11. Upload, processing-status, and chat UI components — not present in this replica yet.
 12. Docker, AWS, Colab, tests, and deployment hardening.
 
 The order matters. We first create stable boundaries, then add one capability

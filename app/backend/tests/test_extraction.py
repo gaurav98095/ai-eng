@@ -49,3 +49,9 @@ def test_extractor_rejects_unsupported_or_invalid_documents(
 def test_chunker_rejects_invalid_overlap() -> None:
     with pytest.raises(ValueError, match="overlap smaller than size"):
         chunk_text("text", chunk_size=10, overlap=10)
+
+
+def test_chunker_does_not_emit_one_character_steps_before_a_long_word() -> None:
+    text = "prefix " + "x" * 200
+    chunks = chunk_text(text, chunk_size=100, overlap=20)
+    assert chunks == [text[:100], text[80:180], text[160:]]

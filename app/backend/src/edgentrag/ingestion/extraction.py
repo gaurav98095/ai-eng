@@ -52,7 +52,7 @@ def chunk_text(
         end = min(start + chunk_size, len(text))
         if end < len(text):
             boundary = text.rfind(" ", start, end)
-            if boundary > start:
+            if boundary > start + overlap:
                 end = boundary
 
         chunk = text[start:end].strip()

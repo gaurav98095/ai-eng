@@ -156,8 +156,10 @@ the prompt or lower the requested output. For 422, check the request fields.
 For 503, check the server token and `/tmp/edgentrag-generation.log` in Colab.
 If the tunnel cannot connect, check the runtime and rerun its tunnel cell.
 
-Do not add a generation URL to the local backend configuration yet: this
-module does not include a backend generation client.
+The backend answer endpoint now consumes this service at
+`POST /sessions/{session_id}/answers`; configure the URL/token as described in
+Module 12. The queued chat endpoint is a separate acceptance-only contract
+until its worker is implemented.
 
 ## 7. Verify the component without a GPU
 

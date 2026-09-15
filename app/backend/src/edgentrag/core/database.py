@@ -1,6 +1,6 @@
 """The async SQLAlchemy database boundary."""
 
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -22,6 +22,10 @@ class Database:
             database_url,
             pool_pre_ping=True,
         )
+        if self._engine.dialect.name == "sqlite":
+            event.listen(
+                self._engine.sync_engine, "connect", _enable_sqlite_foreign_keys
+            )
         self.sessions = async_sessionmaker(
             self._engine,
             class_=AsyncSession,
@@ -36,3 +40,12 @@ class Database:
     async def dispose(self) -> None:
         """Close pooled connections during application shutdown."""
         await self._engine.dispose()
+
+
+def _enable_sqlite_foreign_keys(connection, _record) -> None:
+    """SQLite otherwise silently ignores foreign keys and delete cascades."""
+    cursor = connection.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+    finally:
+        cursor.close()

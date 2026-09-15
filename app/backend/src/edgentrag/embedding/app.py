@@ -2,7 +2,6 @@
 
 import hmac
 import logging
-import math
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -11,6 +10,8 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 from edgentrag.embedding.model import SentenceTransformerEmbedder, TextEmbedder
+from edgentrag.embedding.schemas import EmbeddingBatch as EmbedResponse
+from edgentrag.embedding.schemas import validate_embedding_batch
 from edgentrag.embedding.settings import EmbeddingSettings
 
 logger = logging.getLogger(__name__)
@@ -21,14 +22,6 @@ class EmbedRequest(BaseModel):
     """A bounded batch of texts to encode with the configured model."""
 
     texts: list[str] = Field(min_length=1, max_length=64)
-
-
-class EmbedResponse(BaseModel):
-    """Vectors in input order plus their model identity and dimensions."""
-
-    model: str
-    dimensions: int
-    embeddings: list[list[float]]
 
 
 def create_app(
@@ -76,8 +69,8 @@ def create_app(
                 detail="embedding service authentication is not configured",
             )
         if credentials is None or not hmac.compare_digest(
-            credentials.credentials,
-            expected_token,
+            credentials.credentials.encode("utf-8"),
+            expected_token.encode("utf-8"),
         ):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -89,8 +82,7 @@ def create_app(
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
-                    "a batch may contain at most "
-                    f"{app_settings.max_batch_size} texts"
+                    f"a batch may contain at most {app_settings.max_batch_size} texts"
                 ),
             )
         if any(
@@ -98,7 +90,7 @@ def create_app(
             for text in body.texts
         ):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=(
                     "each text must contain non-whitespace content and stay "
                     f"within {app_settings.max_text_characters} characters"
@@ -110,16 +102,10 @@ def create_app(
             if len(vectors) != len(body.texts) or not vectors or not vectors[0]:
                 raise RuntimeError("model returned an unexpected vector batch")
             dimensions = len(vectors[0])
-            if any(len(vector) != dimensions for vector in vectors):
-                raise RuntimeError(
-                    "model returned vectors with inconsistent dimensions"
-                )
-            if any(
-                not math.isfinite(value)
-                for vector in vectors
-                for value in vector
-            ):
-                raise RuntimeError("model returned a non-finite vector value")
+            result = EmbedResponse(
+                model=app_settings.model_name, dimensions=dimensions, embeddings=vectors
+            )
+            validate_embedding_batch(result, len(body.texts))
         except Exception as exc:
             logger.exception("Embedding request failed")
             raise HTTPException(
@@ -127,11 +113,7 @@ def create_app(
                 detail="embedding model is temporarily unavailable",
             ) from exc
 
-        return EmbedResponse(
-            model=app_settings.model_name,
-            dimensions=dimensions,
-            embeddings=vectors,
-        )
+        return result
 
     return app
 

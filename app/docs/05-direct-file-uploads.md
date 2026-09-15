@@ -43,8 +43,11 @@ At this stage only `.md` and `.txt` files have an implemented processor. Other
 file types are rejected until their parser components are added.
 
 The declared size and MIME type come from the client and are not proof of what
-the bytes contain. They are useful for limits and signing; the next component
-will verify the resulting S3 object before processing it.
+the bytes contain. They are useful for limits and signing; the completion
+endpoint verifies the resulting S3 object's metadata before processing it. The
+extension/MIME pair is checked before signing, and the session is marked
+`processing` as soon as targets are issued. Stale awaiting targets have no
+expiry cleanup yet; a future lifecycle job should cancel them.
 
 ## What is persisted
 

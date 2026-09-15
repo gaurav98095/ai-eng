@@ -29,6 +29,11 @@ confirmation is safe: the API returns the existing status without enqueueing a
 second message. SQS is an at-least-once queue, so the future worker must still
 be idempotent in case a message is delivered more than once.
 
+Confirmation takes the session lifecycle lock while checking metadata,
+publishing, and committing the status. This serializes confirmations and worker
+updates for one session. Queue publication and the database commit are still
+not atomic; an outbox/reconciliation step is deferred.
+
 The queue adapter is behind a small `IngestionQueue` protocol, like the S3
 adapter is behind `ObjectStorage`. Tests use fakes, while local development and
 production use the same boto3 adapter pointed at Floci or AWS.

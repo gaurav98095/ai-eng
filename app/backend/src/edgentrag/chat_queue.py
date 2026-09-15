@@ -1,6 +1,7 @@
 """Queue boundary for interactive chat jobs."""
 
 import json
+from dataclasses import dataclass
 from functools import cached_property
 from typing import Protocol
 
@@ -12,10 +13,24 @@ class ChatQueueUnavailable(Exception):
     """Raised when a chat job cannot be accepted."""
 
 
+@dataclass(frozen=True)
+class ChatQueueMessage:
+    """Chat payload and receipt handle required to acknowledge delivery."""
+
+    body: str
+    receipt_handle: str
+
+
 class ChatQueue(Protocol):
     def enqueue_message(
         self, *, session_id: str, message_id: str, question: str
     ) -> None: ...
+
+    def receive_messages(
+        self, *, max_messages: int = 1, wait_time_seconds: int = 20
+    ) -> list[ChatQueueMessage]: ...
+
+    def delete_message(self, *, receipt_handle: str) -> None: ...
 
 
 class SQSChatQueue:
@@ -52,6 +67,49 @@ class SQSChatQueue:
             )
         except (BotoCoreError, ClientError) as exc:
             raise ChatQueueUnavailable("could not enqueue the chat message") from exc
+
+    def receive_messages(
+        self, *, max_messages: int = 1, wait_time_seconds: int = 20
+    ) -> list[ChatQueueMessage]:
+        """Long-poll a bounded batch from SQS."""
+        if not self.queue_url:
+            raise ChatQueueUnavailable("chat queue is not configured")
+        if not 1 <= max_messages <= 10:
+            raise ValueError("max_messages must be between 1 and 10")
+        if not 0 <= wait_time_seconds <= 20:
+            raise ValueError("wait_time_seconds must be between 0 and 20")
+        try:
+            response = self._client.receive_message(
+                QueueUrl=self.queue_url,
+                MaxNumberOfMessages=max_messages,
+                WaitTimeSeconds=wait_time_seconds,
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise ChatQueueUnavailable("could not receive chat jobs") from exc
+        try:
+            return [
+                ChatQueueMessage(
+                    body=str(message["Body"]),
+                    receipt_handle=str(message["ReceiptHandle"]),
+                )
+                for message in response.get("Messages", [])
+            ]
+        except KeyError as exc:
+            raise ChatQueueUnavailable(
+                "SQS returned an incomplete chat message"
+            ) from exc
+
+    def delete_message(self, *, receipt_handle: str) -> None:
+        """Acknowledge a job only after its answer is durably stored."""
+        if not self.queue_url:
+            raise ChatQueueUnavailable("chat queue is not configured")
+        try:
+            self._client.delete_message(
+                QueueUrl=self.queue_url,
+                ReceiptHandle=receipt_handle,
+            )
+        except (BotoCoreError, ClientError) as exc:
+            raise ChatQueueUnavailable("could not acknowledge chat job") from exc
 
     def close(self) -> None:
         if "_client" in self.__dict__:

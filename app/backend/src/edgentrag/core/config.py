@@ -49,8 +49,8 @@ class Settings(BaseSettings):
     search_max_chunks: int = Field(default=5000, ge=1, le=50000)
 
     @model_validator(mode="after")
-    def validate_embedding_configuration(self) -> "Settings":
-        """Require a URL and bearer token together when embeddings are enabled."""
+    def validate_model_configuration(self) -> "Settings":
+        """Resolve selected hosts and require their URL/token pairs."""
         if self.use_colab_for_embedding:
             # Preserve pre-profile Colab configuration for existing installations.
             self.embedding_service_url = (

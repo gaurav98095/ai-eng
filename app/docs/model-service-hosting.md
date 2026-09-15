@@ -81,8 +81,9 @@ configured, otherwise the legacy `EDGENTRAG_EMBEDDING_SERVICE_URL`. This preserv
 existing installations, including text-only ingestion when URL and token are
 both unset. The local `.env` now contains both switches; credentials are preserved.
 
-The generation profile URL is optional because the local backend does not yet
-call generation as part of chat. When configured, `test-run.sh` independently
+The generation profile URL is required for grounded answers and queued chat
+turns; the chat worker calls the same `/generate` contract as the answers
+endpoint. When configured, `test-run.sh` independently
 tests the generation service with its own bearer token; the notebook also
 verifies `/generate` directly.
 

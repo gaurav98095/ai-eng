@@ -17,13 +17,14 @@ from edgentrag.core.config import Settings
 from edgentrag.ingestion.queue import IngestionQueue, QueueUnavailable
 from edgentrag.sessions.models import ChatSession, SessionFile
 from edgentrag.sessions.schemas import SessionResponse
+from edgentrag.sessions.state import lock_session
 from edgentrag.sessions.upload_schemas import (
     UploadConfirmationResponse,
     UploadRequest,
     UploadResponse,
     UploadTarget,
 )
-from edgentrag.sessions.uploads import is_supported_filename
+from edgentrag.sessions.uploads import expected_content_type, is_supported_filename
 from edgentrag.storage.s3 import (
     ObjectNotFound,
     ObjectStorage,
@@ -82,6 +83,11 @@ async def create_upload_targets(
                 status_code=413,
                 detail=f"{file_spec.filename} exceeds the upload size limit",
             )
+        if file_spec.content_type != expected_content_type(file_spec.filename):
+            raise HTTPException(
+                status_code=415,
+                detail="content type does not match the file extension",
+            )
 
     targets: list[UploadTarget] = []
     rows: list[SessionFile] = []
@@ -121,6 +127,13 @@ async def create_upload_targets(
             detail="file storage is temporarily unavailable",
         ) from exc
 
+    # End the read transaction before acquiring the shared lifecycle write lock.
+    await database_session.rollback()
+    await lock_session(database_session, session_id)
+    session = await database_session.get(ChatSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    session.status = "processing"
     database_session.add_all(rows)
     await database_session.commit()
     return UploadResponse(session_id=session_id, targets=targets)
@@ -139,11 +152,12 @@ async def complete_upload(
     ingestion_queue: Annotated[IngestionQueue, Depends(get_ingestion_queue)],
 ) -> UploadConfirmationResponse:
     """Verify stored bytes and enqueue the file for asynchronous processing."""
+    await lock_session(database_session, session_id)
     file_record = await database_session.get(SessionFile, file_id)
     if file_record is None or file_record.session_id != session_id:
         raise HTTPException(status_code=404, detail="uploaded file not found")
 
-    if file_record.status == "uploaded":
+    if file_record.status in {"uploaded", "processing", "ready", "failed"}:
         return UploadConfirmationResponse(
             session_id=session_id,
             file_id=file_id,

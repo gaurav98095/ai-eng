@@ -1,20 +1,11 @@
 """Async HTTP client used by the ingestion worker to call Colab."""
 
-import math
 from typing import Protocol
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-
-class EmbeddingBatch(BaseModel):
-    """Validated vectors returned by the embedding service for one batch."""
-
-    model_config = ConfigDict(allow_inf_nan=False)
-
-    model: str = Field(min_length=1, max_length=255)
-    dimensions: int = Field(gt=0)
-    embeddings: list[list[float]]
+from edgentrag.embedding.schemas import EmbeddingBatch as EmbeddingBatch
+from edgentrag.embedding.schemas import validate_embedding_batch
 
 
 class EmbeddingProvider(Protocol):
@@ -51,27 +42,15 @@ class HttpEmbeddingClient:
             response = await self._client.post("/embed", json={"texts": texts})
             response.raise_for_status()
             batch = EmbeddingBatch.model_validate(response.json())
-        except (httpx.HTTPError, ValueError, ValidationError) as exc:
+        except (httpx.HTTPError, ValueError) as exc:
             raise EmbeddingServiceUnavailable(
                 "embedding service request failed"
             ) from exc
 
-        if len(batch.embeddings) != len(texts):
-            raise EmbeddingServiceUnavailable(
-                "embedding service returned a different number of vectors"
-            )
-        if any(len(vector) != batch.dimensions for vector in batch.embeddings):
-            raise EmbeddingServiceUnavailable(
-                "embedding service returned inconsistent vector dimensions"
-            )
-        if any(
-            not math.isfinite(value)
-            for vector in batch.embeddings
-            for value in vector
-        ):
-            raise EmbeddingServiceUnavailable(
-                "embedding service returned non-finite vector values"
-            )
+        try:
+            validate_embedding_batch(batch, len(texts))
+        except ValueError as exc:
+            raise EmbeddingServiceUnavailable(str(exc)) from exc
         return batch
 
     async def aclose(self) -> None:
