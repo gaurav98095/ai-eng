@@ -14,6 +14,16 @@ def upgrade() -> None:
     if op.get_bind().dialect.name != "postgresql":
         return
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    # Revision 0004 stored embeddings as JSON for SQLite compatibility. The
+    # v3 PostgreSQL path must use a native fixed-width vector before creating
+    # an HNSW index. PostgreSQL can cast JSON arrays (e.g. ``[0.1, 0.2]``)
+    # through text to pgvector; NULL values remain NULL.
+    op.execute(
+        "ALTER TABLE chunks "
+        "ALTER COLUMN embedding TYPE vector(384) "
+        "USING CASE WHEN embedding IS NULL THEN NULL "
+        "ELSE embedding::text::vector END"
+    )
     # HNSW is safe to build concurrently during a later release window; the
     # normal migration keeps transactional semantics for first-time installs.
     op.execute(

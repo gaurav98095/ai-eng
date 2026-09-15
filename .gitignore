@@ -7,3 +7,8 @@ __pycache__/
 .env
 commands.md
 v3/
+# Terraform state and account-specific variables
+app/terraform/.terraform/
+app/terraform/*.tfstate*
+app/terraform/prod.tfvars
+app/terraform/*.tfplan
