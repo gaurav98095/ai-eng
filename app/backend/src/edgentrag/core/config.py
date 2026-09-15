@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # SQLite is intentionally the local-dev default. Production deployments
     # point this at RDS PostgreSQL; the database boundary normalizes drivers.
-    database_url: str = "sqlite+aiosqlite:///./edgentrag.db"
+    database_url: str = "postgresql+asyncpg://edgentrag:edgentrag@localhost:5432/edgentrag"
     db_pool_size: int = Field(default=10, ge=1, le=100)
     db_max_overflow: int = Field(default=5, ge=0, le=100)
     redis_url: str = "redis://localhost:6379/0"

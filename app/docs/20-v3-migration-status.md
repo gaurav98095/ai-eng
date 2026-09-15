@@ -1,8 +1,8 @@
 # v3 architecture migration status
 
 The v3 reference is the source of truth for deployment and persistence
-boundaries. This migration is intentionally incremental so local development
-continues to use SQLite while production can use RDS PostgreSQL.
+boundaries. Local Compose uses Docker PostgreSQL/pgvector; production uses RDS
+PostgreSQL.
 
 ## Implemented foundation
 

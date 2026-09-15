@@ -22,10 +22,11 @@ Database(database_url) creates one async engine
 
 ## The database URL
 
-For local development, .env.example uses SQLite:
+For unit tests, settings can use a temporary SQLite database. Local Compose
+uses Docker PostgreSQL with pgvector:
 
 ~~~ini
-EDGENTRAG_DATABASE_URL=sqlite+aiosqlite:///./edgentrag.db
+EDGENTRAG_DATABASE_URL=postgresql+asyncpg://edgentrag:edgentrag@localhost:5432/edgentrag
 ~~~
 
 Make the local environment file from the checked-in template once:
