@@ -6,6 +6,7 @@ from typing import cast
 from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from edgentrag.chat_queue import ChatQueue
 from edgentrag.core.config import Settings
 from edgentrag.core.database import Database
 from edgentrag.embedding.client import EmbeddingProvider
@@ -32,6 +33,11 @@ def get_object_storage(request: Request) -> ObjectStorage:
 def get_ingestion_queue(request: Request) -> IngestionQueue:
     """Return the queue adapter created for this application process."""
     return cast(IngestionQueue, request.app.state.ingestion_queue)
+
+
+def get_chat_queue(request: Request) -> ChatQueue:
+    """Return the queue adapter for interactive chat jobs."""
+    return cast(ChatQueue, request.app.state.chat_queue)
 
 
 def get_embedding_provider(request: Request) -> EmbeddingProvider | None:

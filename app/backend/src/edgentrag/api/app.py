@@ -9,9 +9,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from edgentrag.api.routes.answers import router as answers_router
+from edgentrag.api.routes.chat import router as chat_router
 from edgentrag.api.routes.health import router as health_router
 from edgentrag.api.routes.search import router as search_router
 from edgentrag.api.routes.sessions import router as sessions_router
+from edgentrag.chat_queue import SQSChatQueue
 from edgentrag.core.config import Settings, load_settings
 from edgentrag.core.database import Database
 from edgentrag.embedding.client import HttpEmbeddingClient
@@ -35,6 +37,11 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
         )
         app.state.ingestion_queue = SQSIngestionQueue(
             queue_url=app_settings.ingestion_queue_url,
+            region=app_settings.aws_region,
+            endpoint_url=app_settings.aws_endpoint_url,
+        )
+        app.state.chat_queue = SQSChatQueue(
+            queue_url=app_settings.chat_queue_url,
             region=app_settings.aws_region,
             endpoint_url=app_settings.aws_endpoint_url,
         )
@@ -62,6 +69,7 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
             await app.state.database.dispose()
             app.state.object_storage.close()
             app.state.ingestion_queue.close()
+            app.state.chat_queue.close()
 
     app = FastAPI(
         title="EdgentRAG API",
@@ -72,6 +80,7 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
     app.state.settings = app_settings
     app.include_router(health_router)
     app.include_router(sessions_router)
+    app.include_router(chat_router)
     app.include_router(search_router)
     app.include_router(answers_router)
     return app
