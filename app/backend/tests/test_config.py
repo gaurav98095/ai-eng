@@ -37,6 +37,7 @@ def test_services_select_hosts_independently(embedding_colab, llm_colab):
         embedding_service_url="https://old.example.test",
         colab_embedding_service_url="https://colab.example.test",
         lightning_embedding_service_url="https://lightning.example.test",
+        generation_api_token="generation-test-token",
         colab_generation_service_url="https://colab-generation.example.test",
         lightning_generation_service_url="https://lightning-generation.example.test",
     )
@@ -100,3 +101,14 @@ def test_embedding_service_url_and_token_must_be_configured_together() -> None:
 
     with pytest.raises(ValidationError, match="must be configured together"):
         Settings(_env_file=None, embedding_api_token="test-token")
+
+
+def test_selected_generation_host_requires_url_and_token_together() -> None:
+    with pytest.raises(ValidationError, match="must be configured together"):
+        Settings(
+            _env_file=None,
+            colab_generation_service_url="https://generation.example.test",
+        )
+
+    with pytest.raises(ValidationError, match="must be configured together"):
+        Settings(_env_file=None, generation_api_token="test-token")

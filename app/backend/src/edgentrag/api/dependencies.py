@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from edgentrag.core.config import Settings
 from edgentrag.core.database import Database
 from edgentrag.embedding.client import EmbeddingProvider
+from edgentrag.generation.client import GenerationProvider
 from edgentrag.ingestion.queue import IngestionQueue
 from edgentrag.storage.s3 import ObjectStorage
 
@@ -36,6 +37,11 @@ def get_ingestion_queue(request: Request) -> IngestionQueue:
 def get_embedding_provider(request: Request) -> EmbeddingProvider | None:
     """Return the optional shared HTTP client owned by this API process."""
     return cast(EmbeddingProvider | None, request.app.state.embedding_provider)
+
+
+def get_generation_provider(request: Request) -> GenerationProvider | None:
+    """Return the optional shared generation client owned by this API process."""
+    return cast(GenerationProvider | None, request.app.state.generation_provider)
 
 
 async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:

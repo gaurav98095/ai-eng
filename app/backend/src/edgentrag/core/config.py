@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     lightning_embedding_service_url: AnyHttpUrl | None = None
     lightning_generation_service_url: AnyHttpUrl | None = None
     generation_service_url: AnyHttpUrl | None = None
+    generation_api_token: SecretStr = SecretStr("")
+    generation_request_timeout_seconds: float = Field(default=300, gt=0, le=600)
     embedding_service_url: AnyHttpUrl | None = None
     embedding_api_token: SecretStr = SecretStr("")
     embedding_batch_size: int = Field(default=32, gt=0, le=64)
@@ -60,9 +62,8 @@ class Settings(BaseSettings):
                     "use_colab_for_embedding is false"
                 )
             self.embedding_service_url = self.lightning_embedding_service_url
-        # Generation is not consumed by the backend yet; its URL stays optional.
         self.generation_service_url = (
-            self.colab_generation_service_url
+            (self.colab_generation_service_url or self.generation_service_url)
             if self.use_colab_for_llm
             else self.lightning_generation_service_url
         )
@@ -71,6 +72,13 @@ class Settings(BaseSettings):
         if has_url != has_token:
             raise ValueError(
                 "embedding_service_url and embedding_api_token "
+                "must be configured together"
+            )
+        has_generation_url = self.generation_service_url is not None
+        has_generation_token = bool(self.generation_api_token.get_secret_value())
+        if has_generation_url != has_generation_token:
+            raise ValueError(
+                "generation_service_url and generation_api_token "
                 "must be configured together"
             )
         return self
