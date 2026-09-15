@@ -1,6 +1,18 @@
 services:
-  # Start Floci separately on the host (`floci start`). It emulates S3/SQS
-  # locally; production configuration leaves AWS_ENDPOINT_URL unset.
+  floci:
+    profiles: ["local"]
+    image: floci/floci:latest
+    environment:
+      FLOCI_HOSTNAME: floci
+    ports:
+      - "4566:4566"
+    volumes:
+      - floci-data:/var/lib/floci
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
   redis:
     profiles: ["local"]
     image: redis:7-alpine
@@ -33,7 +45,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local
@@ -55,7 +67,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_ENVIRONMENT: local
     extra_hosts:
@@ -76,7 +88,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local
@@ -98,7 +110,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local
@@ -117,7 +129,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local
@@ -130,5 +142,6 @@ services:
         condition: service_healthy
 
 volumes:
+  floci-data:
   redis-data:
   postgres-data:

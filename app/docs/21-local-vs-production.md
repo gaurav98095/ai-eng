@@ -2,9 +2,8 @@
 
 The runtime boundary is selected by `EDGENTRAG_ENVIRONMENT`:
 
-- `local`: PostgreSQL/pgvector and Redis in Docker Compose, plus Floci on the
-  host for S3/SQS emulation. Start Floci with `floci start`, then run Compose
-  with the local profile.
+- `local`: Floci, PostgreSQL/pgvector, and Redis all run in Docker Compose for
+  S3/SQS emulation and persistence. Start the stack with `./setup-local.sh`.
 - `production`: RDS PostgreSQL, ElastiCache Redis, S3, and SQS. Leave
   `EDGENTRAG_AWS_ENDPOINT_URL` unset. Credentials come from the workload IAM
   role/Secrets Manager rather than committed files.
@@ -12,8 +11,7 @@ The runtime boundary is selected by `EDGENTRAG_ENVIRONMENT`:
 Example local command:
 
 ```sh
-floci start
-docker compose --profile local -f compose.yaml up --build
+./setup-local.sh
 ```
 
 The normal local profile keeps embedding synchronous when the embedding queue

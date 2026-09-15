@@ -24,8 +24,8 @@ class Settings(BaseSettings):
 
     environment: Literal["local", "test", "production"] = "local"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
-    # SQLite is intentionally the local-dev default. Production deployments
-    # point this at RDS PostgreSQL; the database boundary normalizes drivers.
+    # Local Compose and production both use PostgreSQL; the database boundary
+    # normalizes driver details while tests may override this with SQLite.
     database_url: str = "postgresql+asyncpg://edgentrag:edgentrag@localhost:5432/edgentrag"
     db_pool_size: int = Field(default=10, ge=1, le=100)
     db_max_overflow: int = Field(default=5, ge=0, le=100)
@@ -85,8 +85,8 @@ class Settings(BaseSettings):
                     "production requires queue URLs: " + ", ".join(missing_queues)
                 )
         if self.environment == "local" and not self.aws_endpoint_url:
-            # Floci runs on the developer host; containers use the compose
-            # override to reach it through host.docker.internal.
+            # Compose overrides the endpoint to the internal `floci` service;
+            # host-run commands may continue using localhost:4566.
             self.aws_endpoint_url = "http://localhost:4566"
         if self.use_colab_for_embedding:
             # Preserve pre-profile Colab configuration for existing installations.

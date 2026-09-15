@@ -1,0 +1,7 @@
+environment = "production"
+project_name = "edgentrag"
+aws_region = "ap-south-1"
+# Supply existing VPC/private subnet IDs and a secret through CI or -var.
+vpc_id = "vpc-REPLACE"
+private_subnet_ids = ["subnet-REPLACE-A", "subnet-REPLACE-B"]
+container_image = "REPLACE_ECR_IMAGE"
