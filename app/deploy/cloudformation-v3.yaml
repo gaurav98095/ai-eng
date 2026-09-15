@@ -1,0 +1,50 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EdgentRAG v3 managed-service contract (complete networking/IAM values before deployment).
+Parameters:
+  VpcId: {Type: AWS::EC2::VPC::Id}
+  PrivateSubnetIds: {Type: List<AWS::EC2::Subnet::Id>}
+  DatabaseSecurityGroupIds: {Type: List<AWS::EC2::SecurityGroup::Id>}
+  DatabaseSubnetGroupName: {Type: String}
+  CacheSubnetGroupName: {Type: String}
+Resources:
+  Database:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: postgres
+      DBInstanceClass: db.t4g.medium
+      AllocatedStorage: 50
+      DBName: edgentrag
+      PubliclyAccessible: false
+      DBSubnetGroupName: {Ref: DatabaseSubnetGroupName}
+      VPCSecurityGroups: {Ref: DatabaseSecurityGroupIds}
+  Redis:
+    Type: AWS::ElastiCache::ReplicationGroup
+    Properties:
+      Engine: redis
+      CacheNodeType: cache.t4g.small
+      NumCacheClusters: 1
+      CacheSubnetGroupName: {Ref: CacheSubnetGroupName}
+      SecurityGroupIds: {Ref: DatabaseSecurityGroupIds}
+      TransitEncryptionEnabled: true
+      AtRestEncryptionEnabled: true
+  IngestDLQ: {Type: AWS::SQS::Queue}
+  ChatDLQ: {Type: AWS::SQS::Queue}
+  STTDLQ: {Type: AWS::SQS::Queue}
+  EmbedDLQ: {Type: AWS::SQS::Queue}
+  IngestQueue:
+    Type: AWS::SQS::Queue
+    Properties: {RedrivePolicy: {deadLetterTargetArn: {Fn::GetAtt: [IngestDLQ, Arn]}, maxReceiveCount: 5}}
+  ChatQueue:
+    Type: AWS::SQS::Queue
+    Properties: {RedrivePolicy: {deadLetterTargetArn: {Fn::GetAtt: [ChatDLQ, Arn]}, maxReceiveCount: 5}}
+  STTQueue:
+    Type: AWS::SQS::Queue
+    Properties: {RedrivePolicy: {deadLetterTargetArn: {Fn::GetAtt: [STTDLQ, Arn]}, maxReceiveCount: 5}}
+  EmbedQueue:
+    Type: AWS::SQS::Queue
+    Properties: {RedrivePolicy: {deadLetterTargetArn: {Fn::GetAtt: [EmbedDLQ, Arn]}, maxReceiveCount: 5}}
+Outputs:
+  IngestQueueUrl: {Value: {Ref: IngestQueue}}
+  ChatQueueUrl: {Value: {Ref: ChatQueue}}
+  STTQueueUrl: {Value: {Ref: STTQueue}}
+  EmbedQueueUrl: {Value: {Ref: EmbedQueue}}

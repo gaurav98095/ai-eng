@@ -13,6 +13,8 @@ class EmbeddingProvider(Protocol):
 
     async def embed(self, texts: list[str]) -> EmbeddingBatch: ...
 
+    async def embed_query(self, text: str) -> EmbeddingBatch: ...
+
 
 class EmbeddingServiceUnavailable(Exception):
     """Raised when Colab is unreachable or returns an invalid response."""
@@ -52,6 +54,21 @@ class HttpEmbeddingClient:
         except ValueError as exc:
             raise EmbeddingServiceUnavailable(str(exc)) from exc
         return batch
+
+    async def embed_query(self, text: str) -> EmbeddingBatch:
+        """Use v3's dedicated query route when the service exposes it."""
+        try:
+            response = await self._client.post("/embed_query", json={"text": text})
+            response.raise_for_status()
+            batch = EmbeddingBatch.model_validate(response.json())
+            validate_embedding_batch(batch, 1)
+            return batch
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 404:
+                raise EmbeddingServiceUnavailable("query embedding request failed") from exc
+            return await self.embed([text])
+        except (httpx.HTTPError, ValueError) as exc:
+            raise EmbeddingServiceUnavailable("query embedding request failed") from exc
 
     async def aclose(self) -> None:
         """Close the underlying HTTP connection pool."""

@@ -27,7 +27,11 @@ class ChatQueue(Protocol):
     ) -> None: ...
 
     def receive_messages(
-        self, *, max_messages: int = 1, wait_time_seconds: int = 20
+        self,
+        *,
+        max_messages: int = 1,
+        wait_time_seconds: int = 20,
+        visibility_timeout_seconds: int | None = None,
     ) -> list[ChatQueueMessage]: ...
 
     def delete_message(self, *, receipt_handle: str) -> None: ...
@@ -83,6 +87,11 @@ class SQSChatQueue:
                 QueueUrl=self.queue_url,
                 MaxNumberOfMessages=max_messages,
                 WaitTimeSeconds=wait_time_seconds,
+                **(
+                    {"VisibilityTimeout": visibility_timeout_seconds}
+                    if visibility_timeout_seconds is not None
+                    else {}
+                ),
             )
         except (BotoCoreError, ClientError) as exc:
             raise ChatQueueUnavailable("could not receive chat jobs") from exc

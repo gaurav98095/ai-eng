@@ -31,6 +31,7 @@ class IngestionQueue(Protocol):
         *,
         max_messages: int = 1,
         wait_time_seconds: int = 20,
+        visibility_timeout_seconds: int | None = None,
     ) -> list[QueueMessage]: ...
 
     def delete_message(self, *, receipt_handle: str) -> None: ...
@@ -96,6 +97,11 @@ class SQSIngestionQueue:
                 QueueUrl=self.queue_url,
                 MaxNumberOfMessages=max_messages,
                 WaitTimeSeconds=wait_time_seconds,
+                **(
+                    {"VisibilityTimeout": visibility_timeout_seconds}
+                    if visibility_timeout_seconds is not None
+                    else {}
+                ),
             )
         except (BotoCoreError, ClientError) as exc:
             raise QueueUnavailable("could not receive ingestion jobs") from exc

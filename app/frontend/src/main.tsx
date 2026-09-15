@@ -9,6 +9,11 @@ function App() {
   const [baseUrl, setBaseUrl] = useState("http://127.0.0.1:8000");
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState("");
+  const [token, setToken] = useState(() => window.localStorage.getItem("edgentrag.id_token") ?? "");
+  const saveToken = () => {
+    if (token.trim()) window.localStorage.setItem("edgentrag.id_token", token.trim());
+    else window.localStorage.removeItem("edgentrag.id_token");
+  };
   const connect = async () => {
     setError("");
     try {
@@ -39,6 +44,8 @@ function App() {
             <input id="backend-url" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} type="url" required />
             <button type="submit">Connect backend</button>
           </div>
+          <label htmlFor="id-token">Cognito ID token (optional locally)</label>
+          <input id="id-token" value={token} onChange={(event) => setToken(event.target.value)} onBlur={saveToken} type="password" placeholder="Paste an ID token for production" />
           {error && <p className="error" role="alert">{error}</p>}
         </form>
       </section>

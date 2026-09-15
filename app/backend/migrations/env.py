@@ -8,6 +8,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from edgentrag.core.config import load_settings
+from edgentrag.core.database import _async_url
 from edgentrag.core.models import Base
 from edgentrag.ingestion import models as ingestion_models  # noqa: F401
 from edgentrag.sessions import models as session_models  # noqa: F401
@@ -52,7 +53,7 @@ def run_sync_migrations(connection) -> None:
 async def run_migrations_online() -> None:
     """Run migrations using the configured asynchronous database driver."""
     section = config.get_section(config.config_ini_section, {})
-    section["sqlalchemy.url"] = database_url()
+    section["sqlalchemy.url"] = _async_url(database_url())
     connectable = async_engine_from_config(
         section,
         prefix="sqlalchemy.",

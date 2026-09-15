@@ -1,0 +1,22 @@
+{
+  "family": "edgentrag-v3-ingestion",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "REPLACE_EXECUTION_ROLE_ARN",
+  "taskRoleArn": "REPLACE_WORKER_IAM_ROLE_ARN",
+  "containerDefinitions": [{
+    "name": "ingestion-worker",
+    "image": "REPLACE_ECR_IMAGE",
+    "essential": true,
+    "command": ["python", "-m", "edgentrag.ingestion.worker"],
+    "environment": [
+      {"name": "EDGENTRAG_ENVIRONMENT", "value": "production"},
+      {"name": "EDGENTRAG_INGESTION_QUEUE_URL", "value": "REPLACE_SQS_INGEST_URL"},
+      {"name": "EDGENTRAG_EMBEDDING_QUEUE_URL", "value": "REPLACE_SQS_EMBED_URL"},
+      {"name": "EDGENTRAG_REDIS_URL", "value": "REPLACE_ELASTICACHE_URL"}
+    ],
+    "secrets": [{"name": "EDGENTRAG_DATABASE_URL", "valueFrom": "REPLACE_SSM_PARAMETER_ARN"}]
+  }]
+}

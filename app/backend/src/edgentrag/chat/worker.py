@@ -21,6 +21,7 @@ from edgentrag.retrieval.prompting import AnswerContextTooLarge
 from edgentrag.retrieval.service import SearchLimitExceeded, SearchNotReady
 from edgentrag.sessions.models import ChatSession, Message
 from edgentrag.sessions.state import lock_session
+from edgentrag.shared.events import RedisEvents
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,7 @@ async def process_message(
     settings: Settings,
     embedding_provider: EmbeddingProvider | None,
     generation_provider: GenerationProvider | None,
+    events: RedisEvents | None = None,
 ) -> None:
     """Process one chat job and leave transient failures available for retry."""
     try:
@@ -72,7 +74,6 @@ async def process_message(
             raise RetryableChatJob("answer is already being processed")
         answer.status = "answering"
         await db.commit()
-
     try:
         result = await answer_session(
             database,
@@ -119,17 +120,31 @@ async def process_message(
             )
         )
         await db.commit()
+    if events is not None:
+        events.append_history(job.session_id, "assistant", result.answer)
+        events.publish(
+            job.session_id,
+            "chat.completed",
+            {"message_id": job.message_id, "status": "done"},
+        )
 
 
 async def run_worker() -> None:
     """Poll SQS forever; failed infrastructure work remains available to retry."""
     settings = load_settings()
     logging.basicConfig(level=settings.log_level)
-    database = Database(settings.database_url)
+    database = Database(
+        settings.database_url,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+    )
     queue = SQSChatQueue(
         queue_url=settings.chat_queue_url,
         region=settings.aws_region,
         endpoint_url=settings.aws_endpoint_url,
+    )
+    events = RedisEvents(
+        settings.redis_url, history_turns=settings.history_turns, tls=settings.redis_tls
     )
     embedding_provider = (
         HttpEmbeddingClient(
@@ -153,7 +168,10 @@ async def run_worker() -> None:
         while True:
             try:
                 messages = await asyncio.to_thread(
-                    queue.receive_messages, max_messages=1, wait_time_seconds=20
+                    queue.receive_messages,
+                    max_messages=settings.queue_batch_size,
+                    wait_time_seconds=settings.queue_wait_seconds,
+                    visibility_timeout_seconds=settings.queue_visibility_timeout_seconds,
                 )
             except ChatQueueUnavailable:
                 logger.exception("Could not poll the chat queue; retrying soon")
@@ -167,6 +185,7 @@ async def run_worker() -> None:
                         settings=settings,
                         embedding_provider=embedding_provider,
                         generation_provider=generation_provider,
+                        events=events,
                     )
                 except RetryableChatJob as exc:
                     logger.info("Leaving chat job for retry: %s", exc)
@@ -187,6 +206,7 @@ async def run_worker() -> None:
     finally:
         await database.dispose()
         queue.close()
+        events.close()
         if embedding_provider is not None:
             await embedding_provider.aclose()
         if generation_provider is not None:

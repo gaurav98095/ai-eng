@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { createSession, listChat, sendChat } from "../api";
+import { createEventsTicket, createSession, listChat, sendChat } from "../api";
 import type { ChatMessage } from "../types";
 import { UploadPanel } from "./UploadPanel";
 
@@ -29,8 +29,13 @@ export function SessionWorkspace({ baseUrl }: Props) {
       try { setMessages(await listChat(baseUrl, sessionId)); } catch { /* keep the last view */ }
     };
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 3000);
-    return () => window.clearInterval(timer);
+    let source: EventSource | undefined;
+    void createEventsTicket(baseUrl, sessionId).then(({ ticket }) => {
+      source = new EventSource(`${baseUrl.replace(/\/$/, "")}/sessions/${sessionId}/events?ticket=${encodeURIComponent(ticket)}`);
+      source.onmessage = () => void refresh();
+    }).catch(() => undefined);
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => { window.clearInterval(timer); source?.close(); };
   }, [baseUrl, sessionId]);
 
   const submit = async (event: FormEvent) => {

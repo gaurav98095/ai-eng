@@ -19,6 +19,9 @@ belongs where it does, and leaves the app runnable and tested.
 11. Upload, processing-status, and chat UI components — implemented in `app/frontend/` and documented in [17-upload-status-chat-ui.md](17-upload-status-chat-ui.md).
 12. Docker, AWS, Colab, tests, and deployment hardening — scaffolded in [18-deployment-hardening.md](18-deployment-hardening.md); production-specific infrastructure remains deployment work.
 
+The v3 migration is being applied incrementally. The first slice hardens the
+persistent database foundation in [19-v3-persistence-foundation.md](19-v3-persistence-foundation.md).
+
 The order matters. We first create stable boundaries, then add one capability
 behind each boundary. We do not start with AWS or the frontend because both
 would otherwise depend on code that has not been designed yet.

@@ -9,9 +9,10 @@ export async function checkHealth(baseUrl: string): Promise<HealthResponse> {
 }
 
 async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
+  const token = window.localStorage.getItem("edgentrag.id_token");
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init?.headers },
   });
   if (!response.ok) throw new Error(`Backend returned HTTP ${response.status}`);
   return (await response.json()) as T;
@@ -64,3 +65,6 @@ export const sendChat = (baseUrl: string, sessionId: string, content: string) =>
     method: "POST",
     body: JSON.stringify({ content }),
   });
+
+export const createEventsTicket = (baseUrl: string, sessionId: string) =>
+  request<{ ticket: string; expires_in: number }>(baseUrl, `/sessions/${sessionId}/events/ticket`, { method: "POST" });

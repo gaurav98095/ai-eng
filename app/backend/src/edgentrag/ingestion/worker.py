@@ -30,6 +30,7 @@ from edgentrag.ingestion.queue import (
 )
 from edgentrag.sessions.models import ChatSession, SessionFile
 from edgentrag.sessions.state import lock_session
+from edgentrag.shared.queues import QueueError, SQSQueue
 from edgentrag.storage.s3 import (
     ObjectStorage,
     ObjectTooLarge,
@@ -120,6 +121,7 @@ async def process_message(
     *,
     settings: Settings,
     embedding_provider: EmbeddingProvider | None = None,
+    embedding_queue: SQSQueue | None = None,
 ) -> None:
     """Process one message; retryable infrastructure errors propagate."""
     try:
@@ -176,11 +178,15 @@ async def process_message(
             logger.warning("File %s failed validation: %s", job.file_id, exc)
             return
 
-        embeddings, embedding_model = await _embed_chunks(
-            chunks,
-            provider=embedding_provider,
-            batch_size=settings.embedding_batch_size,
-        )
+        asynchronous_embedding = embedding_queue is not None and bool(settings.embedding_queue_url)
+        if asynchronous_embedding:
+            embeddings, embedding_model = [None for _ in chunks], None
+        else:
+            embeddings, embedding_model = await _embed_chunks(
+                chunks,
+                provider=embedding_provider,
+                batch_size=settings.embedding_batch_size,
+            )
 
         await lock_session(database_session, job.session_id)
         await database_session.refresh(file_record)
@@ -199,13 +205,28 @@ async def process_message(
             )
             for chunk_index, chunk in enumerate(chunks)
         )
-        file_record.status = "ready"
-        await _update_session_status(database_session, session_id=job.session_id)
+        file_record.chunk_count = len(chunks)
+        if not asynchronous_embedding:
+            file_record.status = "ready"
+            await _update_session_status(database_session, session_id=job.session_id)
         await database_session.commit()
+        if asynchronous_embedding:
+            try:
+                await asyncio.to_thread(
+                    embedding_queue.send,
+                    {
+                        "schema_version": 1,
+                        "session_id": job.session_id,
+                        "file_id": job.file_id,
+                    },
+                )
+            except QueueError as exc:
+                raise RetryableIngestionJob("embedding job could not be queued") from exc
         logger.info(
-            "Processed file %s into %d text chunks",
+            "Prepared file %s into %d text chunks%s",
             job.file_id,
             len(chunks),
+            "; queued embedding" if asynchronous_embedding else "",
         )
 
 
@@ -213,7 +234,11 @@ async def run_worker() -> None:
     """Poll SQS forever; failed infrastructure work remains available to retry."""
     settings = load_settings()
     logging.basicConfig(level=settings.log_level)
-    database = Database(settings.database_url)
+    database = Database(
+        settings.database_url,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+    )
     storage = S3ObjectStorage(
         bucket=settings.s3_bucket,
         region=settings.aws_region,
@@ -223,6 +248,17 @@ async def run_worker() -> None:
         queue_url=settings.ingestion_queue_url,
         region=settings.aws_region,
         endpoint_url=settings.aws_endpoint_url,
+    )
+    embedding_queue = (
+        SQSQueue(
+            queue_url=settings.embedding_queue_url,
+            region=settings.aws_region,
+            endpoint_url=settings.aws_endpoint_url,
+            visibility_timeout=settings.queue_visibility_timeout_seconds,
+            wait_seconds=settings.queue_wait_seconds,
+        )
+        if settings.embedding_queue_url
+        else None
     )
     embedding_provider = None
     if settings.embedding_service_url is not None:
@@ -237,8 +273,9 @@ async def run_worker() -> None:
             try:
                 messages = await asyncio.to_thread(
                     queue.receive_messages,
-                    max_messages=1,
-                    wait_time_seconds=20,
+                    max_messages=settings.queue_batch_size,
+                    wait_time_seconds=settings.queue_wait_seconds,
+                    visibility_timeout_seconds=settings.queue_visibility_timeout_seconds,
                 )
             except QueueUnavailable:
                 logger.exception("Could not poll the ingestion queue; retrying soon")
@@ -253,6 +290,7 @@ async def run_worker() -> None:
                         message,
                         settings=settings,
                         embedding_provider=embedding_provider,
+                        embedding_queue=embedding_queue,
                     )
                 except RetryableIngestionJob as exc:
                     logger.info("Leaving ingestion job for retry: %s", exc)
@@ -277,6 +315,8 @@ async def run_worker() -> None:
         await database.dispose()
         storage.close()
         queue.close()
+        if embedding_queue is not None:
+            embedding_queue.close()
         if embedding_provider is not None:
             await embedding_provider.aclose()
 

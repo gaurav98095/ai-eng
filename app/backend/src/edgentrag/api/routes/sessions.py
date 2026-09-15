@@ -35,6 +35,7 @@ from edgentrag.storage.s3 import (
     ObjectStorage,
     StorageUnavailable,
 )
+from edgentrag.shared.auth import current_user, owns
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -43,10 +44,13 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 async def get_session(
     session_id: str,
     database_session: Annotated[AsyncSession, Depends(get_db_session)],
+    user_id: Annotated[str, Depends(current_user)],
 ) -> SessionDetailResponse:
     """Return lifecycle state for a session and its uploaded files."""
     session = await database_session.get(ChatSession, session_id)
     if session is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    if not owns(session.owner_id, user_id):
         raise HTTPException(status_code=404, detail="session not found")
 
     rows = await database_session.scalars(
@@ -78,9 +82,10 @@ async def get_session(
 )
 async def create_session(
     database_session: Annotated[AsyncSession, Depends(get_db_session)],
+    user_id: Annotated[str, Depends(current_user)],
 ) -> SessionResponse:
     """Create an empty session that can receive uploaded documents later."""
-    session = ChatSession()
+    session = ChatSession(owner_id=user_id)
     database_session.add(session)
     await database_session.commit()
     await database_session.refresh(session)
@@ -103,10 +108,13 @@ async def create_upload_targets(
     database_session: Annotated[AsyncSession, Depends(get_db_session)],
     storage: Annotated[ObjectStorage, Depends(get_object_storage)],
     settings: Annotated[Settings, Depends(get_settings)],
+    user_id: Annotated[str, Depends(current_user)],
 ) -> UploadResponse:
     """Validate file metadata and return direct-to-S3 upload links."""
     session = await database_session.get(ChatSession, session_id)
     if session is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    if not owns(session.owner_id, user_id):
         raise HTTPException(status_code=404, detail="session not found")
 
     for file_spec in body.files:
@@ -187,11 +195,15 @@ async def complete_upload(
     database_session: Annotated[AsyncSession, Depends(get_db_session)],
     storage: Annotated[ObjectStorage, Depends(get_object_storage)],
     ingestion_queue: Annotated[IngestionQueue, Depends(get_ingestion_queue)],
+    user_id: Annotated[str, Depends(current_user)],
 ) -> UploadConfirmationResponse:
     """Verify stored bytes and enqueue the file for asynchronous processing."""
     await lock_session(database_session, session_id)
     file_record = await database_session.get(SessionFile, file_id)
     if file_record is None or file_record.session_id != session_id:
+        raise HTTPException(status_code=404, detail="uploaded file not found")
+    session = await database_session.get(ChatSession, session_id)
+    if session is None or not owns(session.owner_id, user_id):
         raise HTTPException(status_code=404, detail="uploaded file not found")
 
     if file_record.status in {"uploaded", "processing", "ready", "failed"}:

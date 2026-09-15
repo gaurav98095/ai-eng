@@ -24,12 +24,29 @@ class Settings(BaseSettings):
 
     environment: Literal["local", "test", "production"] = "local"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # SQLite is intentionally the local-dev default. Production deployments
+    # point this at RDS PostgreSQL; the database boundary normalizes drivers.
     database_url: str = "sqlite+aiosqlite:///./edgentrag.db"
+    db_pool_size: int = Field(default=10, ge=1, le=100)
+    db_max_overflow: int = Field(default=5, ge=0, le=100)
+    redis_url: str = "redis://localhost:6379/0"
+    redis_tls: bool = False
+    history_turns: int = Field(default=8, ge=1, le=50)
     aws_region: str = "ap-south-1"
     aws_endpoint_url: str | None = None
     s3_bucket: str = ""
     ingestion_queue_url: str = ""
     chat_queue_url: str = ""
+    stt_queue_url: str = ""
+    embedding_queue_url: str = ""
+    queue_wait_seconds: int = Field(default=20, ge=0, le=20)
+    queue_visibility_timeout_seconds: int = Field(default=900, gt=0, le=43200)
+    queue_batch_size: int = Field(default=10, ge=1, le=10)
+    queue_max_receives: int = Field(default=5, ge=1, le=100)
+    cognito_region: str = ""
+    cognito_user_pool_id: str = ""
+    cognito_client_id: str = ""
+    sse_ticket_seconds: int = Field(default=60, gt=0, le=600)
     upload_url_ttl_seconds: int = Field(default=900, gt=0, le=604800)
     max_upload_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
     max_text_extract_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
@@ -51,6 +68,26 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_model_configuration(self) -> "Settings":
         """Resolve selected hosts and require their URL/token pairs."""
+        if self.environment == "production" and self.database_url.startswith("sqlite"):
+            raise ValueError(
+                "production requires a PostgreSQL database_url"
+            )
+        if self.environment == "production" and self.aws_endpoint_url:
+            raise ValueError("aws_endpoint_url is only valid for local Floci development")
+        if self.environment == "production":
+            required_queues = {
+                "ingestion_queue_url": self.ingestion_queue_url,
+                "chat_queue_url": self.chat_queue_url,
+            }
+            missing_queues = [name for name, value in required_queues.items() if not value]
+            if missing_queues:
+                raise ValueError(
+                    "production requires queue URLs: " + ", ".join(missing_queues)
+                )
+        if self.environment == "local" and not self.aws_endpoint_url:
+            # Floci runs on the developer host; containers use the compose
+            # override to reach it through host.docker.internal.
+            self.aws_endpoint_url = "http://localhost:4566"
         if self.use_colab_for_embedding:
             # Preserve pre-profile Colab configuration for existing installations.
             self.embedding_service_url = (
@@ -74,6 +111,10 @@ class Settings(BaseSettings):
             raise ValueError(
                 "embedding_service_url and embedding_api_token "
                 "must be configured together"
+            )
+        if self.environment == "production" and has_url and not self.embedding_queue_url:
+            raise ValueError(
+                "production requires embedding_queue_url when embedding is configured"
             )
         has_generation_url = self.generation_service_url is not None
         has_generation_token = bool(self.generation_api_token.get_secret_value())

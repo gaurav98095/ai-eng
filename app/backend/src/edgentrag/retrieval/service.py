@@ -4,7 +4,7 @@ import asyncio
 import math
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from edgentrag.core.database import Database
 from edgentrag.embedding.client import EmbeddingProvider, EmbeddingServiceUnavailable
@@ -98,11 +98,80 @@ async def search_session(
     max_chunks: int,
 ) -> SearchResponse:
     """Search only ready files belonging to this session, without DB writes."""
+    if provider is None:
+        raise EmbeddingServiceUnavailable("embedding service is not configured")
+
+    # Query embeddings are computed before opening the DB transaction so a slow
+    # remote provider cannot hold a connection.  PostgreSQL can then execute
+    # the ANN/vector operator in the database; SQLite retains the bounded
+    # in-process reference implementation for local development.
+    embed_query = getattr(provider, "embed_query", None)
+    batch = await (embed_query(query) if embed_query else provider.embed([query]))
+    if len(batch.embeddings) != 1:
+        raise EmbeddingServiceUnavailable("embedding service returned an invalid query")
+    query_vector = unit_vector(batch.embeddings[0], batch.dimensions)
+    if query_vector is None:
+        raise EmbeddingServiceUnavailable("embedding service returned an invalid query")
+
+    dialect = database._engine.dialect.name
+    if dialect == "postgresql" and hasattr(DocumentChunk.embedding, "cosine_distance"):
+        async with database.sessions() as database_session:
+            if await database_session.get(ChatSession, session_id) is None:
+                raise SessionNotFound("session not found")
+            compatible = (
+                select(func.count())
+                .select_from(DocumentChunk)
+                .join(SessionFile, DocumentChunk.session_file_id == SessionFile.id)
+                .where(
+                    SessionFile.session_id == session_id,
+                    SessionFile.status == "ready",
+                    DocumentChunk.embedding_model == batch.model,
+                    DocumentChunk.embedding.is_not(None),
+                )
+            )
+            searched = int((await database_session.scalar(compatible)) or 0)
+            if searched == 0:
+                raise SearchNotReady(
+                    "no compatible embeddings; re-upload documents using the current model"
+                )
+            distance = DocumentChunk.embedding.cosine_distance(query_vector)
+            rows = await database_session.execute(
+                select(DocumentChunk, SessionFile.filename, distance.label("distance"))
+                .join(SessionFile, DocumentChunk.session_file_id == SessionFile.id)
+                .where(
+                    SessionFile.session_id == session_id,
+                    SessionFile.status == "ready",
+                    DocumentChunk.embedding_model == batch.model,
+                    DocumentChunk.embedding.is_not(None),
+                )
+                .order_by(distance, DocumentChunk.id)
+                .limit(top_k)
+            )
+            matches = [
+                SearchMatch(
+                    chunk_id=chunk.id,
+                    file_id=chunk.session_file_id,
+                    filename=filename,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content,
+                    score=max(-1.0, min(1.0, 1.0 - float(raw_distance))),
+                )
+                for chunk, filename, raw_distance in rows
+            ]
+        if not matches:
+            raise SearchNotReady("no compatible embeddings; re-upload documents using the current model")
+        return SearchResponse(
+            session_id=session_id,
+            query=query,
+            model=batch.model,
+            searched_chunks=searched,
+            skipped_chunks=0,
+            matches=matches,
+        )
+
     async with database.sessions() as database_session:
         if await database_session.get(ChatSession, session_id) is None:
             raise SessionNotFound("session not found")
-        if provider is None:
-            raise EmbeddingServiceUnavailable("embedding service is not configured")
         rows = await database_session.execute(
             select(DocumentChunk, SessionFile.filename)
             .join(SessionFile, DocumentChunk.session_file_id == SessionFile.id)
@@ -135,13 +204,6 @@ async def search_session(
             "no embedded chunks are ready; upload with embeddings enabled "
             "and wait for ingestion"
         )
-
-    batch = await provider.embed([query])
-    if len(batch.embeddings) != 1:
-        raise EmbeddingServiceUnavailable("embedding service returned an invalid query")
-    query_vector = unit_vector(batch.embeddings[0], batch.dimensions)
-    if query_vector is None:
-        raise EmbeddingServiceUnavailable("embedding service returned an invalid query")
 
     matches, searched = await asyncio.to_thread(
         rank_candidates,

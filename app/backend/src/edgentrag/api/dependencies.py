@@ -13,6 +13,7 @@ from edgentrag.embedding.client import EmbeddingProvider
 from edgentrag.generation.client import GenerationProvider
 from edgentrag.ingestion.queue import IngestionQueue
 from edgentrag.storage.s3 import ObjectStorage
+from edgentrag.shared.events import RedisEvents
 
 
 def get_settings(request: Request) -> Settings:
@@ -48,6 +49,10 @@ def get_embedding_provider(request: Request) -> EmbeddingProvider | None:
 def get_generation_provider(request: Request) -> GenerationProvider | None:
     """Return the optional shared generation client owned by this API process."""
     return cast(GenerationProvider | None, request.app.state.generation_provider)
+
+
+def get_events(request: Request) -> RedisEvents:
+    return cast(RedisEvents, request.app.state.events)
 
 
 async def get_db_session(request: Request) -> AsyncIterator[AsyncSession]:

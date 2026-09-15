@@ -20,6 +20,8 @@ from edgentrag.embedding.client import HttpEmbeddingClient
 from edgentrag.generation.client import HttpGenerationClient
 from edgentrag.ingestion.queue import SQSIngestionQueue
 from edgentrag.storage.s3 import S3ObjectStorage
+from edgentrag.shared.events import RedisEvents
+from edgentrag.api.routes.events import router as events_router
 
 
 def create_app(*, settings: Settings | None = None) -> FastAPI:
@@ -29,11 +31,20 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         """Create shared resources once and release them during shutdown."""
-        app.state.database = Database(app_settings.database_url)
+        app.state.database = Database(
+            app_settings.database_url,
+            pool_size=app_settings.db_pool_size,
+            max_overflow=app_settings.db_max_overflow,
+        )
         app.state.object_storage = S3ObjectStorage(
             bucket=app_settings.s3_bucket,
             region=app_settings.aws_region,
             endpoint_url=app_settings.aws_endpoint_url,
+        )
+        app.state.events = RedisEvents(
+            app_settings.redis_url,
+            history_turns=app_settings.history_turns,
+            tls=app_settings.redis_tls,
         )
         app.state.ingestion_queue = SQSIngestionQueue(
             queue_url=app_settings.ingestion_queue_url,
@@ -67,6 +78,7 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
             if app.state.embedding_provider is not None:
                 await app.state.embedding_provider.aclose()
             await app.state.database.dispose()
+            app.state.events.close()
             app.state.object_storage.close()
             app.state.ingestion_queue.close()
             app.state.chat_queue.close()
@@ -83,6 +95,7 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
     app.include_router(chat_router)
     app.include_router(search_router)
     app.include_router(answers_router)
+    app.include_router(events_router)
     return app
 
 

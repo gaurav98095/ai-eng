@@ -1,0 +1,25 @@
+{
+  "family": "edgentrag-v3-embedding",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "REPLACE_EXECUTION_ROLE_ARN",
+  "taskRoleArn": "REPLACE_WORKER_IAM_ROLE_ARN",
+  "containerDefinitions": [{
+    "name": "embedding-worker",
+    "image": "REPLACE_ECR_EMBEDDING_IMAGE",
+    "essential": true,
+    "command": ["python", "-m", "edgentrag.embedding.worker"],
+    "environment": [
+      {"name": "EDGENTRAG_ENVIRONMENT", "value": "production"},
+      {"name": "EDGENTRAG_EMBEDDING_QUEUE_URL", "value": "REPLACE_SQS_EMBED_URL"},
+      {"name": "EDGENTRAG_EMBEDDING_SERVICE_URL", "value": "REPLACE_EMBEDDING_SERVICE_URL"},
+      {"name": "EDGENTRAG_REDIS_URL", "value": "REPLACE_ELASTICACHE_URL"}
+    ],
+    "secrets": [
+      {"name": "EDGENTRAG_DATABASE_URL", "valueFrom": "REPLACE_SSM_DATABASE_URL_PARAMETER_ARN"},
+      {"name": "EDGENTRAG_EMBEDDING_API_TOKEN", "valueFrom": "REPLACE_SSM_EMBEDDING_TOKEN_PARAMETER_ARN"}
+    ]
+  }]
+}

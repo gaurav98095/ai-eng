@@ -1,9 +1,26 @@
 services:
+  # Start Floci separately on the host (`floci start`). It emulates S3/SQS
+  # locally; production configuration leaves AWS_ENDPOINT_URL unset.
+  redis:
+    profiles: ["local"]
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
   api:
     build:
       context: ./backend
     env_file:
       - ./backend/.env
+    environment:
+      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_REDIS_URL: redis://redis:6379/0
+      EDGENTRAG_ENVIRONMENT: local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     command: ["uvicorn", "edgentrag.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -16,19 +33,73 @@ services:
   ingestion-worker:
     build:
       context: ./backend
+      dockerfile: Dockerfile.ingestion
     env_file:
       - ./backend/.env
+    environment:
+      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_REDIS_URL: redis://redis:6379/0
+      EDGENTRAG_ENVIRONMENT: local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: ["python", "-m", "edgentrag.ingestion.worker"]
     depends_on:
       api:
         condition: service_healthy
+      redis:
+        condition: service_started
 
   chat-worker:
     build:
       context: ./backend
+      dockerfile: Dockerfile.chat
     env_file:
       - ./backend/.env
+    environment:
+      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_REDIS_URL: redis://redis:6379/0
+      EDGENTRAG_ENVIRONMENT: local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: ["python", "-m", "edgentrag.chat.worker"]
     depends_on:
       api:
         condition: service_healthy
+      redis:
+        condition: service_started
+
+  stt-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.stt
+    env_file:
+      - ./backend/.env
+    environment:
+      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_REDIS_URL: redis://redis:6379/0
+      EDGENTRAG_ENVIRONMENT: local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_started
+
+  embedding-worker:
+    profiles: ["async-embedding"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.embedding
+    env_file:
+      - ./backend/.env
+    environment:
+      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_REDIS_URL: redis://redis:6379/0
+      EDGENTRAG_ENVIRONMENT: local
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_started
+
+volumes:
+  redis-data:
