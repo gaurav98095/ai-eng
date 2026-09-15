@@ -3,16 +3,17 @@ services:
     profiles: ["local"]
     image: floci/floci:latest
     environment:
-      FLOCI_HOSTNAME: floci
+      # Browser-facing URLs must resolve on the host. Application containers
+      # use their explicit internal endpoint override below.
+      FLOCI_BASE_URL: http://localhost:4566
+      FLOCI_STORAGE_MODE: persistent
     ports:
       - "4566:4566"
     volumes:
-      - floci-data:/var/lib/floci
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:4566/_localstack/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
+      # Floci starts real service containers (for example Lambda/RDS) and
+      # needs access to the host Docker daemon for those workflows and its UI.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - floci-data:/app/data
   redis:
     profiles: ["local"]
     image: redis:7-alpine
@@ -46,6 +47,10 @@ services:
       - ./backend/.env
     environment:
       EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
+      EDGENTRAG_INGESTION_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-ingestion
+      EDGENTRAG_CHAT_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-chat
+      EDGENTRAG_STT_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-stt
+      EDGENTRAG_EMBEDDING_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-embedding
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local
@@ -68,6 +73,8 @@ services:
       - ./backend/.env
     environment:
       EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
+      EDGENTRAG_INGESTION_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-ingestion
+      EDGENTRAG_EMBEDDING_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-embedding
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_ENVIRONMENT: local
     extra_hosts:
@@ -89,6 +96,7 @@ services:
       - ./backend/.env
     environment:
       EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
+      EDGENTRAG_CHAT_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-chat
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local
@@ -111,6 +119,7 @@ services:
       - ./backend/.env
     environment:
       EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
+      EDGENTRAG_STT_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-stt
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local
@@ -130,6 +139,7 @@ services:
       - ./backend/.env
     environment:
       EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
+      EDGENTRAG_EMBEDDING_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-embedding
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local

@@ -73,7 +73,11 @@ class SQSChatQueue:
             raise ChatQueueUnavailable("could not enqueue the chat message") from exc
 
     def receive_messages(
-        self, *, max_messages: int = 1, wait_time_seconds: int = 20
+        self,
+        *,
+        max_messages: int = 1,
+        wait_time_seconds: int = 20,
+        visibility_timeout_seconds: int | None = None,
     ) -> list[ChatQueueMessage]:
         """Long-poll a bounded batch from SQS."""
         if not self.queue_url:
