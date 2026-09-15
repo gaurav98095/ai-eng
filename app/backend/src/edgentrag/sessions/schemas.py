@@ -12,5 +12,25 @@ class SessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     session_id: str
-    status: Literal["created"]
+    status: Literal["created", "processing", "ready", "failed"]
     created_at: datetime
+
+
+class SessionFileResponse(BaseModel):
+    """Public metadata and lifecycle state for one uploaded file."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    file_id: str
+    filename: str
+    content_type: str
+    size_bytes: int
+    status: Literal[
+        "awaiting_upload", "uploaded", "processing", "ready", "failed"
+    ]
+
+
+class SessionDetailResponse(SessionResponse):
+    """Session state together with its upload records."""
+
+    files: list[SessionFileResponse]

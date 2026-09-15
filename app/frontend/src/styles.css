@@ -1,0 +1,40 @@
+:root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #e5edf8; background: #0b1220; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+.shell { min-height: 100vh; max-width: 1100px; margin: auto; padding: 32px clamp(20px, 5vw, 72px); }
+.header { display: flex; justify-content: space-between; align-items: center; gap: 20px; border-bottom: 1px solid #26344a; padding-bottom: 24px; }
+h1, h2, p { margin: 0; }
+h1 { font-size: 1.35rem; letter-spacing: -.03em; }
+h2 { max-width: 620px; font-size: clamp(2rem, 5vw, 4rem); line-height: 1.02; letter-spacing: -.06em; }
+.eyebrow { color: #78a8ff; font-size: .7rem; font-weight: 700; letter-spacing: .16em; margin-bottom: 10px; }
+.status { color: #a9b8cf; font-size: .85rem; white-space: nowrap; }
+.status i { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: #f0ad4e; }
+.status i.ok { background: #4fd19a; }
+.welcome { margin-top: clamp(88px, 16vh, 180px); }
+.muted { max-width: 560px; color: #9aaac2; font-size: 1.05rem; line-height: 1.6; margin-top: 24px; }
+button { margin-top: 34px; border: 0; border-radius: 9px; padding: 13px 20px; color: #081120; background: #8bb4ff; font: inherit; font-weight: 700; cursor: pointer; }
+button:hover { background: #aecbff; }
+.connect { margin-top: 34px; max-width: 620px; }
+.connect label { display: block; color: #9aaac2; font-size: .8rem; margin-bottom: 8px; }
+.connect-row { display: flex; gap: 10px; }
+input { min-width: 0; flex: 1; border: 1px solid #34445d; border-radius: 9px; padding: 13px 14px; color: #e5edf8; background: #121d30; font: inherit; }
+.connect button { margin-top: 0; white-space: nowrap; }
+.error { color: #ff9f9f; margin-top: 12px; font-size: .85rem; }
+.workspace { margin-top: 72px; border: 1px solid #26344a; border-radius: 14px; padding: 22px; background: #101a2b; }
+.workspace-head, .composer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.session-id { color: #b8c8df; font-family: ui-monospace, monospace; font-size: .8rem; }
+.messages { display: grid; gap: 12px; min-height: 180px; margin: 24px 0; }
+.message { max-width: 78%; border-radius: 10px; padding: 12px 15px; background: #1a2940; }
+.message.user { justify-self: end; background: #203b62; }
+.message span { color: #78a8ff; font-size: .72rem; font-weight: 700; }
+.message p { color: #d8e4f4; line-height: 1.5; margin-top: 5px; white-space: pre-wrap; }
+.composer input { width: 100%; }
+.composer button { margin-top: 0; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+.upload-panel { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid #26344a; }
+.button { display: inline-flex; align-items: center; margin-top: 0; border-radius: 9px; padding: 10px 14px; color: #081120; background: #8bb4ff; font-weight: 700; cursor: pointer; }
+.button input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.file-list { display: grid; gap: 7px; padding: 0; margin: 16px 0 0; list-style: none; }
+.file-list li { display: flex; justify-content: space-between; gap: 16px; padding: 9px 11px; border: 1px solid #26344a; border-radius: 7px; color: #d8e4f4; }
+.status { color: #a9b8cf; font-size: .8rem; }
+@media (max-width: 600px) { .header, .connect-row { align-items: flex-start; flex-direction: column; } .connect button { width: 100%; } }

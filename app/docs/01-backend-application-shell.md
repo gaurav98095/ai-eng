@@ -14,10 +14,10 @@ belongs where it does, and leaves the app runnable and tested.
 6. Queue contracts and ingestion worker.
 7. Colab broker and model-service client.
 8. Chat API and worker — complete ([Component 14](14-chat-worker.md)).
-9. React application shell — not present in this replica yet.
-10. React service connection screen — not present in this replica yet.
-11. Upload, processing-status, and chat UI components — not present in this replica yet.
-12. Docker, AWS, Colab, tests, and deployment hardening.
+9. React application shell — implemented in `app/frontend/` and documented in [15-react-shell-and-connection.md](15-react-shell-and-connection.md).
+10. React service connection screen — implemented as the health-check connection screen in `app/frontend/` and documented in [15-react-shell-and-connection.md](15-react-shell-and-connection.md).
+11. Upload, processing-status, and chat UI components — implemented in `app/frontend/` and documented in [17-upload-status-chat-ui.md](17-upload-status-chat-ui.md).
+12. Docker, AWS, Colab, tests, and deployment hardening — scaffolded in [18-deployment-hardening.md](18-deployment-hardening.md); production-specific infrastructure remains deployment work.
 
 The order matters. We first create stable boundaries, then add one capability
 behind each boundary. We do not start with AWS or the frontend because both

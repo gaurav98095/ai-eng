@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
@@ -16,7 +17,11 @@ from edgentrag.api.dependencies import (
 from edgentrag.core.config import Settings
 from edgentrag.ingestion.queue import IngestionQueue, QueueUnavailable
 from edgentrag.sessions.models import ChatSession, SessionFile
-from edgentrag.sessions.schemas import SessionResponse
+from edgentrag.sessions.schemas import (
+    SessionDetailResponse,
+    SessionFileResponse,
+    SessionResponse,
+)
 from edgentrag.sessions.state import lock_session
 from edgentrag.sessions.upload_schemas import (
     UploadConfirmationResponse,
@@ -32,6 +37,38 @@ from edgentrag.storage.s3 import (
 )
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+
+@router.get("/{session_id}", response_model=SessionDetailResponse)
+async def get_session(
+    session_id: str,
+    database_session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> SessionDetailResponse:
+    """Return lifecycle state for a session and its uploaded files."""
+    session = await database_session.get(ChatSession, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="session not found")
+
+    rows = await database_session.scalars(
+        select(SessionFile)
+        .where(SessionFile.session_id == session_id)
+        .order_by(SessionFile.created_at, SessionFile.id)
+    )
+    return SessionDetailResponse(
+        session_id=session.id,
+        status=session.status,
+        created_at=session.created_at,
+        files=[
+            SessionFileResponse(
+                file_id=row.id,
+                filename=row.filename,
+                content_type=row.content_type,
+                size_bytes=row.size_bytes,
+                status=row.status,
+            )
+            for row in rows
+        ],
+    )
 
 
 @router.post(

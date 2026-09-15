@@ -1,0 +1,34 @@
+services:
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "edgentrag.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  ingestion-worker:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    command: ["python", "-m", "edgentrag.ingestion.worker"]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  chat-worker:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    command: ["python", "-m", "edgentrag.chat.worker"]
+    depends_on:
+      api:
+        condition: service_healthy
