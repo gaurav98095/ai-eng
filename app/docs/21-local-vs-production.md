@@ -2,8 +2,9 @@
 
 The runtime boundary is selected by `EDGENTRAG_ENVIRONMENT`:
 
-- `local`: Floci, PostgreSQL/pgvector, and Redis all run in Docker Compose for
-  S3/SQS emulation and persistence. Start the stack with `./setup-local.sh`.
+- `local`: PostgreSQL/pgvector and Redis run in Docker Compose. Floci runs
+  separately on the host's published port `4566` for S3/SQS emulation. Start
+  Floci first, then use `make -C app infra-local` from the repository root.
 - `production`: RDS PostgreSQL, ElastiCache Redis, S3, and SQS. Leave
   `EDGENTRAG_AWS_ENDPOINT_URL` unset. Credentials come from the workload IAM
   role/Secrets Manager rather than committed files.
@@ -14,11 +15,11 @@ Example local command:
 ./setup-local.sh
 ```
 
-The normal local profile keeps embedding synchronous when the embedding queue
-URL is unset. To exercise the v3 asynchronous embedding boundary, configure an
-embedding queue URL; Compose starts the dedicated worker, which consumes only
+The current local Compose configuration sets an embedding queue URL and starts
+the dedicated worker, which consumes only
 `{session_id, file_id}` identifiers after ingestion has committed chunks.
+Direct embedding remains available in code when the embedding queue URL is unset.
 
-The production overlay is only a configuration convenience; the v3 AWS
-deployment remains the preferred ECS/ASG deployment described in the release
-runbook.
+The production overlay currently inherits local configuration when merged with
+the base and must not be deployed unchanged. See the [application guide](../README.md)
+for production prerequisites and known limitations.

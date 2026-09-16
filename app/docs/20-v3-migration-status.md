@@ -34,7 +34,8 @@ PostgreSQL.
   enabled. Workers with optional queues unset disable themselves cleanly.
 - Asynchronous embedding queue path: ingestion persists chunks and publishes
   identifiers; the dedicated embedding worker writes vectors and finalizes
-  file/session state. The local default keeps direct embedding for simplicity.
+  file/session state. Current local Compose enables this queue path; direct
+  embedding is used only when the embedding queue URL is unset.
 
 The STT worker validates jobs but deliberately leaves valid work unacknowledged
 until a transcription provider and durable transcript callback are configured;
