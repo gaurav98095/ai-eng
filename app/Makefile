@@ -1,5 +1,7 @@
 .PHONY: infra-local infra-prod infra-prod-plan destroy-local destroy-prod migrate-local migrate-prod
 
+COMPOSE = docker compose --profile local -f compose.yaml
+
 infra-local:
 	./setup-local.sh
 
@@ -17,7 +19,7 @@ destroy-prod:
 	./destroy-prod.sh
 
 migrate-local:
-	cd backend && alembic upgrade head
+	$(COMPOSE) exec -T api alembic upgrade head
 
 migrate-prod:
 	@test -n "$${EDGENTRAG_DATABASE_URL:-}" || (echo "EDGENTRAG_DATABASE_URL is required" && exit 1)

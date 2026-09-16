@@ -1,21 +1,37 @@
 # Production overlay: use this with an external env/secrets provider.
 # No local emulator or Redis container is defined here; AWS managed services
 # (RDS, ElastiCache, SQS and S3) are selected by the environment values.
+x-production-env: &production-env
+  EDGENTRAG_ENVIRONMENT: production
+  EDGENTRAG_AWS_ENDPOINT_URL: ""
+
 services:
   api:
+    env_file: []
     environment:
-      EDGENTRAG_ENVIRONMENT: production
-      EDGENTRAG_AWS_ENDPOINT_URL: ""
+      <<: *production-env
     restart: unless-stopped
 
   ingestion-worker:
+    env_file: []
     environment:
-      EDGENTRAG_ENVIRONMENT: production
-      EDGENTRAG_AWS_ENDPOINT_URL: ""
+      <<: *production-env
     restart: unless-stopped
 
   chat-worker:
+    env_file: []
     environment:
-      EDGENTRAG_ENVIRONMENT: production
-      EDGENTRAG_AWS_ENDPOINT_URL: ""
+      <<: *production-env
+    restart: unless-stopped
+
+  stt-worker:
+    env_file: []
+    environment:
+      <<: *production-env
+    restart: unless-stopped
+
+  embedding-worker:
+    env_file: []
+    environment:
+      <<: *production-env
     restart: unless-stopped

@@ -15,21 +15,19 @@ QUEUE_NAMES = (
 BUCKET_NAME = "edgentrag-local"
 
 
+def aws_client_kwargs() -> dict[str, str]:
+    return {
+        "region_name": os.getenv("EDGENTRAG_AWS_REGION", "us-east-1"),
+        "endpoint_url": os.getenv("EDGENTRAG_AWS_ENDPOINT_URL", "http://floci:4566"),
+        "aws_access_key_id": os.getenv("AWS_ACCESS_KEY_ID", "test"),
+        "aws_secret_access_key": os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
+    }
+
+
 def main() -> None:
-    client = boto3.client(
-        "sqs",
-        region_name=os.getenv("EDGENTRAG_AWS_REGION", "us-east-1"),
-        endpoint_url=os.getenv("EDGENTRAG_AWS_ENDPOINT_URL", "http://floci:4566"),
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
-    )
-    s3 = boto3.client(
-        "s3",
-        region_name=os.getenv("EDGENTRAG_AWS_REGION", "us-east-1"),
-        endpoint_url=os.getenv("EDGENTRAG_AWS_ENDPOINT_URL", "http://floci:4566"),
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
-    )
+    kwargs = aws_client_kwargs()
+    client = boto3.client("sqs", **kwargs)
+    s3 = boto3.client("s3", **kwargs)
     try:
         s3.create_bucket(Bucket=BUCKET_NAME)
         print(f"S3 bucket ready: {BUCKET_NAME}")
