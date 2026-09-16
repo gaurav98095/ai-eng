@@ -4,7 +4,16 @@ export type HealthResponse = { status: string };
 
 export async function checkHealth(baseUrl: string): Promise<HealthResponse> {
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/health`);
-  if (!response.ok) throw new Error(`Backend returned HTTP ${response.status}`);
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      detail = payload.detail ? `: ${payload.detail}` : "";
+    } catch {
+      // Keep the status-only message for non-JSON error responses.
+    }
+    throw new Error(`Backend returned HTTP ${response.status}${detail}`);
+  }
   return (await response.json()) as HealthResponse;
 }
 
@@ -44,7 +53,13 @@ export const createUploadTargets = (
   );
 
 export async function putUpload(target: UploadTarget, file: File): Promise<void> {
-  const response = await fetch(target.upload_url, {
+  // Containers reach Floci through Docker's host gateway, but the browser
+  // must use the host-published address instead.
+  const browserUploadUrl = target.upload_url.replace(
+    "http://host.docker.internal:4566",
+    "http://localhost:4566",
+  );
+  const response = await fetch(browserUploadUrl, {
     method: "PUT",
     headers: { "Content-Type": target.content_type },
     body: file,

@@ -7,6 +7,7 @@ features can grow without turning this file into an untestable dependency hub.
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from edgentrag.api.routes.answers import router as answers_router
 from edgentrag.api.routes.chat import router as chat_router
@@ -88,6 +89,16 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
         version="0.1.0",
         description="API for uploading material and asking grounded questions.",
         lifespan=lifespan,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     app.state.settings = app_settings
     app.include_router(health_router)

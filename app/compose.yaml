@@ -1,19 +1,4 @@
 services:
-  floci:
-    profiles: ["local"]
-    image: floci/floci:latest
-    environment:
-      # Browser-facing URLs must resolve on the host. Application containers
-      # use their explicit internal endpoint override below.
-      FLOCI_BASE_URL: http://localhost:4566
-      FLOCI_STORAGE_MODE: persistent
-    ports:
-      - "4566:4566"
-    volumes:
-      # Floci starts real service containers (for example Lambda/RDS) and
-      # needs access to the host Docker daemon for those workflows and its UI.
-      - /var/run/docker.sock:/var/run/docker.sock
-      - floci-data:/app/data
   redis:
     profiles: ["local"]
     image: redis:7-alpine
@@ -22,6 +7,11 @@ services:
       - "6379:6379"
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   postgres:
     profiles: ["local"]
@@ -46,16 +36,24 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
-      EDGENTRAG_INGESTION_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-ingestion
-      EDGENTRAG_CHAT_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-chat
-      EDGENTRAG_STT_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-stt
-      EDGENTRAG_EMBEDDING_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-embedding
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: ap-south-1
+      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_INGESTION_QUEUE_URL: http://host.docker.internal:4566/000000000000/edgentrag-local-ingestion
+      EDGENTRAG_CHAT_QUEUE_URL: http://host.docker.internal:4566/000000000000/edgentrag-local-chat
+      EDGENTRAG_STT_QUEUE_URL: http://host.docker.internal:4566/000000000000/edgentrag-local-stt
+      EDGENTRAG_EMBEDDING_QUEUE_URL: http://host.docker.internal:4566/000000000000/edgentrag-local-embedding
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
     ports:
       - "8000:8000"
     command: ["uvicorn", "edgentrag.api.app:app", "--host", "0.0.0.0", "--port", "8000"]
@@ -82,10 +80,14 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
-      EDGENTRAG_INGESTION_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-ingestion
-      EDGENTRAG_EMBEDDING_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-embedding
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: ap-south-1
+      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_INGESTION_QUEUE_URL: http://host.docker.internal:4566/000000000000/edgentrag-local-ingestion
+      EDGENTRAG_EMBEDDING_QUEUE_URL: http://host.docker.internal:4566/000000000000/edgentrag-local-embedding
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
+      EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -105,8 +107,11 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
-      EDGENTRAG_CHAT_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-chat
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: ap-south-1
+      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_CHAT_QUEUE_URL: http://host.docker.internal:4566/000000000000/edgentrag-local-chat
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local
@@ -128,8 +133,11 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
-      EDGENTRAG_STT_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-stt
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: ap-south-1
+      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_STT_QUEUE_URL: http://host.docker.internal:4566/000000000000/edgentrag-local-stt
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local
@@ -148,8 +156,11 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      EDGENTRAG_AWS_ENDPOINT_URL: http://floci:4566
-      EDGENTRAG_EMBEDDING_QUEUE_URL: http://floci:4566/000000000000/edgentrag-local-embedding
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: ap-south-1
+      EDGENTRAG_AWS_ENDPOINT_URL: http://host.docker.internal:4566
+      EDGENTRAG_EMBEDDING_QUEUE_URL: http://host.docker.internal:4566/000000000000/edgentrag-local-embedding
       EDGENTRAG_REDIS_URL: redis://redis:6379/0
       EDGENTRAG_DATABASE_URL: postgresql+asyncpg://edgentrag:edgentrag@postgres:5432/edgentrag
       EDGENTRAG_ENVIRONMENT: local
@@ -162,6 +173,5 @@ services:
         condition: service_healthy
 
 volumes:
-  floci-data:
   redis-data:
   postgres-data:

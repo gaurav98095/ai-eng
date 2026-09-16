@@ -14,7 +14,13 @@ class RedisEvents:
         self.url = url
         self.history_turns = history_turns
         self.tls = tls
-        self.client = Redis.from_url(url, decode_responses=True, ssl=tls or None)
+        # Do not pass ``ssl=None``: redis-py treats the presence of the
+        # keyword as an instruction to construct an SSL connection, and the
+        # plain TCP connection class rejects it.
+        options = {"decode_responses": True}
+        if tls:
+            options["ssl"] = True
+        self.client = Redis.from_url(url, **options)
 
     def append_history(self, session_id: str, role: str, content: str) -> None:
         key = f"chat:{session_id}"
@@ -44,7 +50,10 @@ class RedisEvents:
 
 async def subscribe(url: str, session_id: str, *, tls: bool = False):
     """Yield pub/sub payloads; callers decide keepalive and disconnect policy."""
-    client = AsyncRedis.from_url(url, decode_responses=True, ssl=tls or None)
+    options = {"decode_responses": True}
+    if tls:
+        options["ssl"] = True
+    client = AsyncRedis.from_url(url, **options)
     pubsub = client.pubsub()
     await pubsub.subscribe(f"events:{session_id}")
     try:

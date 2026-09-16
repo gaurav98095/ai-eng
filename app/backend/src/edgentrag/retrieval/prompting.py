@@ -30,7 +30,12 @@ class AnswerContext:
     sources: list[AnswerSource]
 
 
-def build_answer_context(query: str, matches: list[SearchMatch]) -> AnswerContext:
+def build_answer_context(
+    query: str,
+    matches: list[SearchMatch],
+    *,
+    max_prompt_chars: int = MAX_PROMPT_CHARS,
+) -> AnswerContext:
     """Pack highest-ranked complete excerpts into the bounded prompt."""
     intro = f"Question:\n{query}\n\nSource excerpts:\n"
     prompt = intro
@@ -41,7 +46,7 @@ def build_answer_context(query: str, matches: list[SearchMatch]) -> AnswerContex
             f"\n\n{citation} filename={match.filename!r} "
             f"chunk_index={match.chunk_index}\n{match.content}"
         )
-        if len(prompt) + len(excerpt) > MAX_PROMPT_CHARS:
+        if len(prompt) + len(excerpt) > max_prompt_chars:
             if not sources:
                 raise AnswerContextTooLarge(
                     "the highest-ranked source is too large for the generation context"
