@@ -1,5 +1,9 @@
 # Module 13: chat message lifecycle
 
+> **Historical v2 walkthrough.** The durable contract remains, but this page's
+> “old app” wording and standalone assumptions are superseded by
+> [the current architecture guide](22-current-architecture.md).
+
 This module mirrors the old app’s first chat boundary. `POST /sessions/{id}/chat`
 creates a completed user row and a pending assistant row, then places a compact
 job on the dedicated chat queue. `GET /sessions/{id}/chat` returns the full

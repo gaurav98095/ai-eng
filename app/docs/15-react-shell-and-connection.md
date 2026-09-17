@@ -1,5 +1,9 @@
 # Components 15–16: React shell and backend connection
 
+> **Historical v2 walkthrough.** For the frontend in the complete local stack,
+> use `make -C app infra-local` and open `http://localhost:5173`. The standalone
+> Vite command below is only for frontend-focused development.
+
 The frontend now has a buildable Vite/React shell and a connection screen.
 `src/api.ts` owns the HTTP boundary; the component only manages form state and
 presentation. The first connection check calls the backend liveness endpoint,

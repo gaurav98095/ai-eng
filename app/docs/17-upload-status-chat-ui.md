@@ -1,5 +1,8 @@
 # Component 17: upload, status, and chat UI
 
+> **Historical v2 walkthrough.** Use [the current architecture guide](22-current-architecture.md)
+> for the current Compose/Make flow and schema names.
+
 The React workspace now combines three browser responsibilities without
 blurring their boundaries:
 

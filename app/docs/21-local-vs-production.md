@@ -1,5 +1,8 @@
 # Local versus production services
 
+> **Current runbook:** use [Current architecture and operating guide](22-current-architecture.md)
+> for commands and service topology. This page summarizes the boundary only.
+
 The runtime boundary is selected by `EDGENTRAG_ENVIRONMENT`:
 
 - `local`: PostgreSQL/pgvector and Redis run in Docker Compose. Floci runs
@@ -9,10 +12,10 @@ The runtime boundary is selected by `EDGENTRAG_ENVIRONMENT`:
   `EDGENTRAG_AWS_ENDPOINT_URL` unset. Credentials come from the workload IAM
   role/Secrets Manager rather than committed files.
 
-Example local command:
+Example local command from the repository root:
 
 ```sh
-./setup-local.sh
+make -C app infra-local
 ```
 
 The current local Compose configuration sets an embedding queue URL and starts

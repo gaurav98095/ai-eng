@@ -1,5 +1,9 @@
 # Component 4: first domain model and session API
 
+> **Historical v2 walkthrough.** The current schema is the Alembic head with
+> `sessions`, `files`, `chunks`, and chat tables. Use [Current architecture and
+> operating guide](22-current-architecture.md) for current commands.
+
 We now have a database connection, so this component gives the app its first
 piece of durable domain data: a chat session. A session is created before
 uploads; future components will attach files, processing state, and messages

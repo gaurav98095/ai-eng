@@ -16,11 +16,12 @@ cp app/backend/.env.example app/backend/.env
 
 Open http://127.0.0.1:8000/docs to inspect the generated API documentation.
 
+For the current Compose/Make workflow, see
+[`app/docs/22-current-architecture.md`](../docs/22-current-architecture.md).
 Semantic search is available at `POST /sessions/{session_id}/search` after
-documents have been ingested with embeddings enabled. See the step-by-step
-[Component 10 tutorial](../docs/10-semantic-search.md) for configuration and
-examples. From the repository root, `./test-run.sh` also exercises search when
-the embedding URL and token are configured.
+documents have been ingested with embeddings enabled. The old component pages
+remain useful for concepts, but commands such as `test-run.sh` are historical
+and are not present in this repository.
 
 Grounded answers are available at `POST /sessions/{session_id}/answers` when a
 generation service URL and token are configured; see [Component 12](../docs/12-grounded-answers.md).

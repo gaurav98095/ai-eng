@@ -1,5 +1,10 @@
 # Component 8: Colab embedding service
 
+> **Historical v2 walkthrough.** The hosted service remains an optional model
+> provider, but local workers now run through Compose/Make. See [Current
+> architecture and operating guide](22-current-architecture.md) and [model-service
+> hosting](model-service-hosting.md) for the current flow.
+
 This component adds a small HTTP service that turns text into dense vectors
 with Sentence Transformers. It is designed to run separately from FastAPI so
 the API and ingestion worker do not need to load a machine-learning model or

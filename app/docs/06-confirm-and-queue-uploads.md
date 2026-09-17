@@ -1,5 +1,10 @@
 # Component 6: confirm uploads and queue ingestion
 
+> **Historical v2 walkthrough.** The current queue names and endpoints are
+> owned by `app/compose.yaml` and created by `make -C app infra-local`. Use the
+> [current runbook](22-current-architecture.md) for execution; this page does
+> not define a standalone queue configuration.
+
 Component 5 created a database record and a presigned S3 URL. That URL only
 grants permission to upload; it does not prove that bytes arrived. Here the
 client confirms completion, the API checks the object metadata in S3, and only
@@ -38,47 +43,13 @@ The queue adapter is behind a small `IngestionQueue` protocol, like the S3
 adapter is behind `ObjectStorage`. Tests use fakes, while local development and
 production use the same boto3 adapter pointed at Floci or AWS.
 
-## Configure an SQS queue in Floci
+## Current queue configuration
 
-The local queue already created in Floci is `edgentrag-test-queue`, with URL
-`http://localhost:4566/000000000000/edgentrag-test-queue`. This URL is set in
-the local `.env` and example configuration. If you need to create another
-queue later, use the Floci UI or AWS CLI against Floci. The CLI route needs
-dummy credentials for signing; it does not contact real AWS:
+The bootstrap creates ingestion, chat, STT, and embedding queues. Their URLs
+are declared once in the Compose anchor and injected into each worker. Do not
+paste a legacy `edgentrag-test-queue` URL into `.env` or a worker command.
 
-~~~bash
-export AWS_ACCESS_KEY_ID=test
-export AWS_SECRET_ACCESS_KEY=test
-export AWS_DEFAULT_REGION=us-east-1
-aws sqs create-queue \
-  --queue-name edgentrag-ingestion \
-  --endpoint-url http://localhost:4566 \
-  --region us-east-1
-~~~
-
-For a newly-created queue, copy its returned `QueueUrl` into
-`app/backend/.env`. The existing queue uses:
-
-~~~dotenv
-EDGENTRAG_INGESTION_QUEUE_URL=http://localhost:4566/000000000000/edgentrag-test-queue
-~~~
-
-Prefer the exact URL Floci returns if its account ID or path differs. Keep
-`EDGENTRAG_AWS_ENDPOINT_URL=http://localhost:4566`,
-`EDGENTRAG_AWS_REGION=us-east-1`, and
-`EDGENTRAG_S3_BUCKET=edgentrag-test-1` in that same file. Restart Uvicorn after
-changing settings. If Uvicorn runs inside a container, configure an endpoint
-hostname that the API container can reach rather than `localhost`.
-
-For Floci's local development credentials, export these in the same terminal
-before starting Uvicorn. Keep them out of `.env` and source control:
-
-~~~bash
-export AWS_ACCESS_KEY_ID=test
-export AWS_SECRET_ACCESS_KEY=test
-export AWS_DEFAULT_REGION=us-east-1
-.venv/bin/python -m uvicorn edgentrag.api.app:app --reload
-~~~
+Run the application through Compose so API and workers receive the same values.
 
 ## Use the flow from FastAPI `/docs`
 

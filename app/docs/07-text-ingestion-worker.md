@@ -1,5 +1,9 @@
 # Component 7: extract text in a background worker
 
+> **Historical v2 walkthrough.** The worker is now a Compose service. Start it
+> with [`make -C app infra-local`](22-current-architecture.md); do not run the
+> old host-side command or use the old `document_chunks` table name.
+
 Component 6 verified an uploaded object and enqueued its `session_id` and
 `file_id`. This component adds a separate process that long-polls SQS, loads the
 trusted file record, downloads the object from S3/Floci, validates its actual
@@ -61,20 +65,20 @@ The end-to-end script also applies pending migrations automatically.
 
 ## Run the worker with Floci
 
-Start Floci and FastAPI as in the previous component. In a second terminal at
-the repository root, export Floci's local credentials and start the worker:
+Start Floci and the complete application stack using the [current runbook](22-current-architecture.md).
+The ingestion worker is managed by Compose:
 
 ~~~bash
 export AWS_ACCESS_KEY_ID=test
 export AWS_SECRET_ACCESS_KEY=test
 export AWS_DEFAULT_REGION=us-east-1
-.venv/bin/python -m edgentrag.ingestion.worker
+docker compose -f app/compose.yaml logs --tail=100 ingestion-worker
 ~~~
 
-Keep that terminal running. Submit the session/upload/PUT/complete requests
-from FastAPI `/docs` or `testcode.md`. The worker receives the SQS job, stores
-chunks, and acknowledges the message only after the database commit. Stop it
-with Ctrl+C when you are done.
+Submit the session/upload/PUT/complete requests from FastAPI `/docs`. The
+worker receives the SQS job, stores chunks, and acknowledges the message only
+after the database commit. Stop the application with `make -C app destroy-local`
+when you are done.
 
 ## Retry and failure behavior
 

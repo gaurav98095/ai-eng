@@ -1,5 +1,8 @@
 # Component 3: database boundary and readiness
 
+> **Historical v2 walkthrough.** The current local stack uses Docker PostgreSQL
+> with pgvector; see [Current architecture and operating guide](22-current-architecture.md).
+
 This component established the database connection before adding application
 tables. That separation is intentional: first we established how the
 application owns and tests a database resource; Component 4 adds the first

@@ -1,5 +1,10 @@
 # Module 11: a standalone language-model API
 
+> **Historical v2 walkthrough.** The model service contract is still a useful
+> boundary, but local startup is now Compose/Make and the current request path
+> is documented in [the current runbook](22-current-architecture.md) and
+> [model-service hosting](model-service-hosting.md).
+
 Search now returns relevant chunks. It does not yet write an answer. Before
 connecting those two steps, we need one new component: a service that accepts
 a prompt and generates text. This module builds that service only.

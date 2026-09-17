@@ -1,5 +1,8 @@
 # Component 2: typed settings and readiness
 
+> **Historical v2 walkthrough.** Use [Current architecture and operating guide](22-current-architecture.md)
+> for the current Compose-owned configuration and Make commands.
+
 The API now has two health concepts:
 
 ~~~text

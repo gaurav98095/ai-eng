@@ -1,5 +1,9 @@
 # Module 12: answer from retrieved sources
 
+> **Historical v2 walkthrough.** This synchronous endpoint remains a diagnostic
+> path. The normal UI flow is queued chat (`202`) handled by `chat-worker`; use
+> [the current runbook](22-current-architecture.md) for the complete flow.
+
 Module 10 made session search return ranked chunks. Module 11 added a separate
 generation API. This module connects those boundaries: the backend retrieves
 evidence for one session, sends a bounded prompt to the configured model

@@ -62,13 +62,12 @@ URLs are populated. For mixed hosting, run each host's notebook and use the
 matching provider URL for each service. Refresh Colab URLs when tunnels restart. Restart the
 local API and worker after each configuration change; their settings are
 snapshotted at startup. A shell-exported setting overrides the `.env` value.
-`test-run.sh` also reads the resolved settings, so its embedding check follows
-the selected profile. If a generation URL is configured, it posts a small test
-prompt to `/generate` as well. Export the matching token before running it:
+The settings are read by the API and workers at startup. If a generation URL is
+configured, verify it with the authenticated curl smoke test in the hosting
+notebook before starting the local stack:
 
 ```sh
-export EDGENTRAG_GENERATION_API_TOKEN='your-generation-token'
-./test-run.sh
+curl --fail-with-body -sS "https://your-generation-host/health"
 ```
 
 Selecting Lightning for embedding requires its URL and never falls back to a
@@ -83,9 +82,7 @@ both unset. The local `.env` now contains both switches; credentials are preserv
 
 The generation profile URL is required for grounded answers and queued chat
 turns; the chat worker calls the same `/generate` contract as the answers
-endpoint. When configured, `test-run.sh` independently
-tests the generation service with its own bearer token; the notebook also
-verifies `/generate` directly.
+endpoint. The notebook also verifies `/generate` directly.
 
 Switching hosting does not migrate vectors or change model names. Keep the
 same embedding model when reusing stored vectors; otherwise re-ingest the

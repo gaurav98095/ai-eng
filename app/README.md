@@ -262,6 +262,8 @@ not a unified deployment pipeline.
 ## Current limitations
 
 - Worker claims lack crash-recovery leases; chat can remain stuck in `answering`.
+- Synchronous search and answers routes still need session ownership checks
+  before multi-user production exposure.
 - Generic queue parsing/acknowledgment and partial-batch failure handling need hardening.
 - Redis operations in async routes and SSE reconnect/cleanup behavior need work.
 - A failed upload batch can leave unconfirmed files blocking session readiness;
@@ -289,7 +291,9 @@ app/
 └── Makefile               Setup, migration, and teardown entry points
 ```
 
-Read the [engineering workflow](docs/00-engineering-with-codex.md),
+Read the [current architecture and operating guide](docs/22-current-architecture.md)
+first. The numbered pages are historical walkthroughs, not an alternate setup
+path. Then read the [engineering workflow](docs/00-engineering-with-codex.md),
 [upload lifecycle](docs/06-confirm-and-queue-uploads.md),
 [retrieval](docs/10-semantic-search.md),
 [grounded answers](docs/12-grounded-answers.md), and

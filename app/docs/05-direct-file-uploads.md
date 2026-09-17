@@ -1,5 +1,10 @@
 # Component 5: direct file uploads to private S3
 
+> **Historical v2 walkthrough.** The current upload flow uses `sessions`,
+> `files`, PostgreSQL/pgvector, and the four queues bootstrapped by
+> [`make -C app infra-local`](22-current-architecture.md). Use this page for
+> concepts only; do not use its old Floci, table, or migration commands.
+
 This component implements the first half of uploading a file:
 
 1. The browser asks the API for permission to upload.
@@ -39,7 +44,7 @@ unsupported extensions, and compares the declared size with the configured
 maximum. It stores the filename for display, but constructs the S3 object key
 from server-generated IDs. User-provided names never become storage paths.
 
-At this stage only `.md` and `.txt` files have an implemented processor. Other
+The current upload flow supports only `.md` and `.txt` files. Other
 file types are rejected until their parser components are added.
 
 The declared size and MIME type come from the client and are not proof of what
@@ -51,7 +56,7 @@ expiry cleanup yet; a future lifecycle job should cancel them.
 
 ## What is persisted
 
-The session_files table stores:
+The current `files` table stores:
 
 - which session owns the upload;
 - the display filename, declared MIME type, and declared byte size;
@@ -63,11 +68,11 @@ The object key and the presigned URL are different: the key names the object
 inside S3; the signed URL is temporary authority to PUT that object. The URL
 is returned once and is not stored in the database.
 
-Alembic revision 0002 creates the table and its foreign key to chat_sessions.
-Apply it before running the new route:
+The current schema is managed by the full Alembic head. Apply it through the
+running Compose API:
 
 ~~~bash
-.venv/bin/alembic -c app/backend/alembic.ini upgrade head
+make -C app migrate-local
 ~~~
 
 ## S3 adapter boundary
@@ -94,32 +99,19 @@ reject the signature. The adapter uses boto3's default credential chain:
 Without a bucket or valid credentials, target creation returns a safe 503
 message. The API does not reveal SDK exception details to the browser.
 
-### Use Floci for local S3 development
+### Current local storage
 
-The example environment file points the S3 adapter at Floci on
-`http://localhost:4566`, with the development bucket `edgentrag-test-1` in
-`us-east-1` (Northern Virginia). In a terminal, start Floci and load its local
-AWS credentials before starting the API:
-
-~~~bash
-floci start
-eval "$(floci env)"
-~~~
-
-Set `EDGENTRAG_S3_BUCKET=edgentrag-test-1` and
-`EDGENTRAG_AWS_REGION=us-east-1` in `app/backend/.env`. The adapter switches
-to path-style S3 URLs for the emulator, which
-keeps presigned URLs addressable through its single local endpoint. When the
-API runs inside a container, use a Floci hostname reachable from that
-container instead of `localhost` (for example, the host gateway or the Floci
-service name). For real AWS, leave `EDGENTRAG_AWS_ENDPOINT_URL` unset and
-configure normal AWS credentials and permissions.
-
-If the bucket has not been created yet, run:
+Start Floci with the command in the [current runbook](22-current-architecture.md),
+then run `make -C app infra-local`. Compose supplies the container-reachable
+endpoint, bucket, region, and dummy credentials; do not copy old example queue
+or bucket values from this page into `backend/.env`.
 
 ~~~bash
-aws s3 mb s3://edgentrag-test-1 --region us-east-1
+make -C app infra-local
 ~~~
+
+Compose uses path-style presigned URLs and bootstraps the bucket. For real AWS,
+leave `EDGENTRAG_AWS_ENDPOINT_URL` unset and use the workload IAM role.
 
 ## S3 CORS is separate from signing
 

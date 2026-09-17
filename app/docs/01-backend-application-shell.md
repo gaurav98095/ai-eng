@@ -1,5 +1,8 @@
 # Component 1: backend application shell
 
+> **Historical v2 walkthrough.** The current application startup and topology
+> are documented in [Current architecture and operating guide](22-current-architecture.md).
+
 This is the first tutorial in the rebuild. We will deliberately write one
 small, complete component at a time. Each tutorial adds code, explains why it
 belongs where it does, and leaves the app runnable and tested.

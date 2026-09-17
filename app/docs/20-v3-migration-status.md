@@ -1,5 +1,8 @@
 # v3 architecture migration status
 
+> This is a migration record, not a setup tutorial. For the current commands,
+> see [Current architecture and operating guide](22-current-architecture.md).
+
 The v3 reference is the source of truth for deployment and persistence
 boundaries. Local Compose uses Docker PostgreSQL/pgvector; production uses RDS
 PostgreSQL.
@@ -23,7 +26,8 @@ PostgreSQL.
 ## Implemented service boundaries
 
 - Shared Redis history/events and generic SQS at-least-once contracts.
-- Cognito/local authentication and ownership checks on session/chat/events.
+- Cognito/local authentication and ownership checks on session/chat/events;
+  synchronous search/answers ownership checks remain a production blocker.
 - One-time SSE tickets and the Redis-backed event stream.
 - Native PostgreSQL pgvector cosine retrieval with bounded SQLite fallback and
   `/embed_query` integration.

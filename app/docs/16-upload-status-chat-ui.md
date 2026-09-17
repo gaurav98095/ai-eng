@@ -1,5 +1,8 @@
 # Component 16: upload, status, and chat UI boundary
 
+> **Historical v2 walkthrough.** The current UI also receives event updates and
+> the complete startup is documented in [the current runbook](22-current-architecture.md).
+
 The frontend workspace owns session and conversation state in a dedicated
 component. Its API calls remain in `src/api.ts`; polling is deliberately used
 for the current replica because the backend exposes durable chat state and does

@@ -1,5 +1,9 @@
 # Component 14: queued chat worker
 
+> **Historical v2 walkthrough.** Run the current worker as the Compose service
+> started by `make -C app infra-local`; the host-side command below is useful
+> only for isolated development.
+
 The chat API deliberately acknowledges a turn before doing remote inference.
 `POST /sessions/{session_id}/chat` writes a user message and a pending
 assistant row, then publishes only their IDs to SQS. This keeps HTTP latency

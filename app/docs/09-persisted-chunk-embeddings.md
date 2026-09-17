@@ -1,5 +1,10 @@
 # Component 9: call Colab and persist chunk embeddings
 
+> **Historical v2 walkthrough.** Current ingestion publishes identifiers to the
+> dedicated embedding queue and the Compose embedding worker writes vectors.
+> Use [the current runbook](22-current-architecture.md); `test-run.sh` and the
+> old `document_chunks` workflow are not current commands.
+
 Component 8 created a standalone Colab API. This component teaches the local
 ingestion worker to call that API after text extraction and save each returned
 vector with its chunk.
@@ -49,15 +54,13 @@ runtime and tunnel alive while jobs are processing.
 ## Configure the local worker
 
 Start the notebook from [Component 8](08-colab-embedding-service.md) and copy
-its current `trycloudflare.com` URL. In the same local terminal where you run
-`test-run.sh` or the worker, configure that URL and enter the same token you
-saved in Colab Secrets:
+its current URL. Configure the selected provider URL and token in the private
+`app/backend/.env`; see [model-service hosting](model-service-hosting.md).
 
 ~~~zsh
-export EDGENTRAG_EMBEDDING_SERVICE_URL="https://your-random-name.trycloudflare.com"
-read -s "EDGENTRAG_EMBEDDING_API_TOKEN?Colab embedding token: "
-echo
-export EDGENTRAG_EMBEDDING_API_TOKEN
+EDGENTRAG_USE_COLAB_FOR_EMBEDDING=true
+EDGENTRAG_COLAB_EMBEDDING_SERVICE_URL=https://your-current-tunnel
+EDGENTRAG_EMBEDDING_API_TOKEN=your-private-token
 ~~~
 
 The secret is not echoed by `read`. These are process environment variables;
@@ -65,39 +68,27 @@ they are not committed to the repository. Do not put the token in the tunnel
 URL or print it. The required settings are a pair: startup validation rejects
 configuring only one of them.
 
-Run the complete local pipeline while keeping the Colab notebook/tunnel
+Run the complete local pipeline while keeping the model notebook/tunnel
 running:
 
 ~~~bash
-./test-run.sh
+make -C app infra-local
 ~~~
 
-The script starts FastAPI and the worker against Floci, uploads the sample
-Markdown file, and waits for ingestion. With the embedding URL/token set, the
-worker will contact Colab and persist a vector for each chunk. Without them,
-the worker intentionally stays in text-only mode, which is useful for testing
-the upload pipeline when Colab is unavailable.
+Compose starts FastAPI and the workers against Floci. With the embedding
+URL/token set, the embedding worker contacts the hosted service and persists a
+vector for each chunk. Without them, ingestion can run text-only, but search
+requires compatible stored vectors.
 
-To run only the worker manually, keep the embedding variables exported and
-also configure the usual Floci variables:
-
-~~~zsh
-export AWS_ACCESS_KEY_ID=test
-export AWS_SECRET_ACCESS_KEY=test
-export AWS_DEFAULT_REGION=us-east-1
-.venv/bin/python -m edgentrag.ingestion.worker
-~~~
-
-These AWS credentials are dummy values for the local Floci emulator. The
-embedding token is a separate secret and is used only for the HTTPS call to
-Colab.
+The embedding worker is started by Compose. Do not start a second host worker
+against the same queue unless you intentionally want another consumer.
 
 ## Apply the migration and run tests
 
 Upgrade the local schema before starting the worker:
 
 ~~~bash
-.venv/bin/alembic -c app/backend/alembic.ini upgrade head
+make -C app migrate-local
 ~~~
 
 Run the worker and client tests without Floci or a real Colab runtime:

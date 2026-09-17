@@ -1,5 +1,10 @@
 # Component 10: search the saved document chunks
 
+> **Historical v2 walkthrough.** Search now reads `chunks` from the current
+> schema and filters compatible model vectors. Follow
+> [the current runbook](22-current-architecture.md) for startup; `test-run.sh`
+> and the old table names below are historical.
+
 Component 9 persisted an embedding for each chunk. Now we use those vectors to
 find source text related to a question. The result is ranked evidence; generating
 an answer from that evidence is a separate component.
@@ -121,27 +126,22 @@ export EDGENTRAG_EMBEDDING_SERVICE_URL="https://your-current-tunnel.trycloudflar
 read -s "EDGENTRAG_EMBEDDING_API_TOKEN?Colab embedding token: "
 echo
 export EDGENTRAG_EMBEDDING_API_TOKEN
-./test-run.sh
+make -C app infra-local
 ~~~
 
-The script applies migrations, starts the local API and worker, uploads the
-sample Markdown document, waits for chunks and vectors, and searches that same
-session. It prints the matched filenames, chunk indices, and scores. It reads
-effective application settings, including settings in `app/backend/.env`, to
-decide whether to exercise embeddings and search.
+The Make target applies migrations and starts the local API and workers. Use the
+frontend or the API examples below to create a session, upload a document, and
+search it after the embedding worker finishes.
 
-With embeddings enabled, the ingestion wait budget accounts for the sample's
-batch count and the configured embedding request timeout. This replaces the
-old fixed 30-second cutoff, which could kill the worker before its embedding
-request returned. For a longer diagnostic run you can override the budget:
+For diagnostics, inspect the worker logs directly:
 
 ~~~bash
-TEST_WORKER_TIMEOUT_SECONDS=600 ./test-run.sh
+docker compose -f app/compose.yaml logs --tail=100 embedding-worker
 ~~~
 
-This extends how long the script waits; it does not repair a stopped tunnel or
-an unavailable embedding service. If embedding settings are absent, the script
-tests text-only ingestion and explicitly skips search.
+This does not repair a stopped tunnel or an unavailable embedding service. If
+embedding settings are absent, ingestion can complete text-only but search
+requires compatible stored vectors.
 
 To search manually, start the main API with the same embedding settings:
 
@@ -150,7 +150,7 @@ To search manually, start the main API with the same embedding settings:
 ~~~
 
 Use a session that already has completed, embedded documents (for example, the
-session ID printed by `test-run.sh`):
+session ID returned by `POST /sessions`):
 
 ~~~bash
 SESSION_ID="paste-your-session-id"
