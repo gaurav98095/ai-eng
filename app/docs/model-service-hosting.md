@@ -88,6 +88,12 @@ The generation profile URL is required for grounded answers and queued chat
 turns; the chat worker calls the same `/generate` contract as the answers
 endpoint. The notebook also verifies `/generate` directly.
 
+Set `EDGENTRAG_USE_COLAB_FOR_STT` the same way when selecting an STT host. The
+selected STT URL and `EDGENTRAG_STT_API_TOKEN` must be configured together.
+Model names and serving limits now live in `backend/config.yml`: for example,
+change `generation_model_name`, `generation_context_window`, or
+`stt_model_name` there before starting the corresponding hosted service.
+
 Switching hosting does not migrate vectors or change model names. Keep the
 same embedding model when reusing stored vectors; otherwise re-ingest the
 documents so query and document embeddings are compatible.

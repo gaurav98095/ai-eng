@@ -12,8 +12,9 @@ from edgentrag.core.database import Database
 from edgentrag.embedding.client import EmbeddingProvider
 from edgentrag.generation.client import GenerationProvider
 from edgentrag.ingestion.queue import IngestionQueue
-from edgentrag.storage.s3 import ObjectStorage
 from edgentrag.shared.events import RedisEvents
+from edgentrag.storage.s3 import ObjectStorage
+from edgentrag.stt.queue import STTQueue
 
 
 def get_settings(request: Request) -> Settings:
@@ -34,6 +35,11 @@ def get_object_storage(request: Request) -> ObjectStorage:
 def get_ingestion_queue(request: Request) -> IngestionQueue:
     """Return the queue adapter created for this application process."""
     return cast(IngestionQueue, request.app.state.ingestion_queue)
+
+
+def get_stt_queue(request: Request) -> STTQueue:
+    """Return the queue adapter that schedules audio transcription."""
+    return cast(STTQueue, request.app.state.stt_queue)
 
 
 def get_chat_queue(request: Request) -> ChatQueue:

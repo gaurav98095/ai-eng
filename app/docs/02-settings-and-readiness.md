@@ -71,7 +71,7 @@ queue clients, and model-service clients.
 From the repository root:
 
 ~~~bash
-.venv/bin/python -m pip install -e "./app/backend[dev]"
+.venv/bin/python -m pip install -e "./app/backend[dev,documents]"
 cp app/backend/.env.example app/backend/.env
 .venv/bin/python -m ruff check app/backend
 .venv/bin/python -m pytest app/backend

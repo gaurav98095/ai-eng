@@ -39,9 +39,10 @@ def upgrade() -> None:
     op.execute("UPDATE sessions SET files_total = 0 WHERE files_total IS NULL")
     op.execute("UPDATE sessions SET files_done = 0 WHERE files_done IS NULL")
     op.execute("UPDATE sessions SET updated_at = created_at WHERE updated_at IS NULL")
-    op.alter_column("sessions", "files_total", nullable=False, server_default="0")
-    op.alter_column("sessions", "files_done", nullable=False, server_default="0")
-    op.alter_column("sessions", "updated_at", nullable=False)
+    if bind.dialect.name != "sqlite":
+        op.alter_column("sessions", "files_total", nullable=False, server_default="0")
+        op.alter_column("sessions", "files_done", nullable=False, server_default="0")
+        op.alter_column("sessions", "updated_at", nullable=False)
 
     file_columns = {c["name"] for c in sa.inspect(bind).get_columns("files")}
     if "raw_key" not in file_columns and "object_key" in file_columns:
@@ -56,9 +57,10 @@ def upgrade() -> None:
     op.execute("UPDATE files SET kind = 'document' WHERE kind IS NULL")
     op.execute("UPDATE files SET chunk_count = 0 WHERE chunk_count IS NULL")
     op.execute("UPDATE files SET updated_at = created_at WHERE updated_at IS NULL")
-    op.alter_column("files", "kind", nullable=False, server_default="document")
-    op.alter_column("files", "chunk_count", nullable=False, server_default="0")
-    op.alter_column("files", "updated_at", nullable=False)
+    if bind.dialect.name != "sqlite":
+        op.alter_column("files", "kind", nullable=False, server_default="document")
+        op.alter_column("files", "chunk_count", nullable=False, server_default="0")
+        op.alter_column("files", "updated_at", nullable=False)
 
 
 def downgrade() -> None:

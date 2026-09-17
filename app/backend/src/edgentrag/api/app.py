@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from edgentrag.api.routes.answers import router as answers_router
 from edgentrag.api.routes.chat import router as chat_router
+from edgentrag.api.routes.events import router as events_router
 from edgentrag.api.routes.health import router as health_router
 from edgentrag.api.routes.search import router as search_router
 from edgentrag.api.routes.sessions import router as sessions_router
@@ -20,9 +21,10 @@ from edgentrag.core.database import Database
 from edgentrag.embedding.client import HttpEmbeddingClient
 from edgentrag.generation.client import HttpGenerationClient
 from edgentrag.ingestion.queue import SQSIngestionQueue
-from edgentrag.storage.s3 import S3ObjectStorage
 from edgentrag.shared.events import RedisEvents
-from edgentrag.api.routes.events import router as events_router
+from edgentrag.shared.queues import SQSQueue
+from edgentrag.storage.s3 import S3ObjectStorage
+from edgentrag.stt.queue import SQSSTTQueue
 
 
 def create_app(*, settings: Settings | None = None) -> FastAPI:
@@ -57,6 +59,15 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
             region=app_settings.aws_region,
             endpoint_url=app_settings.aws_endpoint_url,
         )
+        app.state.stt_queue = SQSSTTQueue(
+            SQSQueue(
+                queue_url=app_settings.stt_queue_url,
+                region=app_settings.aws_region,
+                endpoint_url=app_settings.aws_endpoint_url,
+                visibility_timeout=app_settings.queue_visibility_timeout_seconds,
+                wait_seconds=app_settings.queue_wait_seconds,
+            )
+        )
         app.state.embedding_provider = None
         app.state.generation_provider = None
         try:
@@ -83,6 +94,7 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
             app.state.object_storage.close()
             app.state.ingestion_queue.close()
             app.state.chat_queue.close()
+            app.state.stt_queue.close()
 
     app = FastAPI(
         title="EdgentRAG API",

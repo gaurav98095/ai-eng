@@ -34,6 +34,9 @@ generation = [
 embedding = [
   "sentence-transformers>=3,<6",
 ]
+documents = [
+  "docling>=2.7,<3",
+]
 stt = [
   "faster-whisper>=1,<2",
   "python-multipart>=0.0.9,<1",

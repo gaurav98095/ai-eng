@@ -13,6 +13,7 @@ from edgentrag.api.dependencies import (
     get_ingestion_queue,
     get_object_storage,
     get_settings,
+    get_stt_queue,
 )
 from edgentrag.core.config import Settings
 from edgentrag.ingestion.queue import IngestionQueue, QueueUnavailable
@@ -29,13 +30,19 @@ from edgentrag.sessions.upload_schemas import (
     UploadResponse,
     UploadTarget,
 )
-from edgentrag.sessions.uploads import expected_content_type, is_supported_filename
+from edgentrag.sessions.uploads import (
+    expected_content_type,
+    is_supported_filename,
+    upload_kind,
+)
+from edgentrag.shared.auth import current_user, owns
+from edgentrag.shared.queues import QueueError
 from edgentrag.storage.s3 import (
     ObjectNotFound,
     ObjectStorage,
     StorageUnavailable,
 )
-from edgentrag.shared.auth import current_user, owns
+from edgentrag.stt.queue import STTQueue
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -67,6 +74,7 @@ async def get_session(
                 file_id=row.id,
                 filename=row.filename,
                 content_type=row.content_type,
+                kind=row.kind,
                 size_bytes=row.size_bytes,
                 status=row.status,
             )
@@ -123,7 +131,12 @@ async def create_upload_targets(
                 status_code=415,
                 detail=f"unsupported file type: {file_spec.filename}",
             )
-        if file_spec.size_bytes > settings.max_upload_bytes:
+        max_size = (
+            settings.max_audio_upload_bytes
+            if upload_kind(file_spec.filename) == "audio"
+            else settings.max_upload_bytes
+        )
+        if file_spec.size_bytes > max_size:
             raise HTTPException(
                 status_code=413,
                 detail=f"{file_spec.filename} exceeds the upload size limit",
@@ -155,6 +168,7 @@ async def create_upload_targets(
                     content_type=file_spec.content_type,
                     size_bytes=file_spec.size_bytes,
                     object_key=object_key,
+                    kind=upload_kind(file_spec.filename),
                 )
             )
             targets.append(
@@ -195,6 +209,8 @@ async def complete_upload(
     database_session: Annotated[AsyncSession, Depends(get_db_session)],
     storage: Annotated[ObjectStorage, Depends(get_object_storage)],
     ingestion_queue: Annotated[IngestionQueue, Depends(get_ingestion_queue)],
+    stt_queue: Annotated[STTQueue, Depends(get_stt_queue)],
+    settings: Annotated[Settings, Depends(get_settings)],
     user_id: Annotated[str, Depends(current_user)],
 ) -> UploadConfirmationResponse:
     """Verify stored bytes and enqueue the file for asynchronous processing."""
@@ -246,16 +262,23 @@ async def complete_upload(
             detail="uploaded file content type does not match the declared type",
         )
 
+    if file_record.kind == "audio" and settings.stt_service_url is None:
+        raise HTTPException(
+            status_code=503,
+            detail="audio transcription is not configured",
+        )
+
+    queue = stt_queue if file_record.kind == "audio" else ingestion_queue
     try:
         await run_in_threadpool(
-            ingestion_queue.enqueue_file,
+            queue.enqueue_file,
             session_id=session_id,
             file_id=file_id,
         )
-    except QueueUnavailable as exc:
+    except (QueueUnavailable, QueueError) as exc:
         raise HTTPException(
             status_code=503,
-            detail="ingestion queue is temporarily unavailable",
+            detail="processing queue is temporarily unavailable",
         ) from exc
 
     file_record.status = "uploaded"

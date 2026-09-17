@@ -13,6 +13,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column
+
 try:
     from pgvector.sqlalchemy import Vector
 except ImportError:  # local installs can still use SQLite without pgvector
@@ -48,7 +49,12 @@ class DocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column(nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(384) if Vector is not None else JSON, nullable=True
+        (
+            JSON().with_variant(Vector(384), "postgresql")
+            if Vector is not None
+            else JSON
+        ),
+        nullable=True,
     )
     embedding_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

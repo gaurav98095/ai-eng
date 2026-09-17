@@ -3,7 +3,16 @@
 from fastapi.testclient import TestClient
 
 from edgentrag.api.app import create_app
+from edgentrag.api.dependencies import get_events
 from edgentrag.core.config import Settings
+
+
+class FakeEvents:
+    def __init__(self, available: bool) -> None:
+        self.available = available
+
+    def ping(self) -> bool:
+        return self.available
 
 
 def test_health_check_reports_a_healthy_api_process() -> None:
@@ -24,14 +33,16 @@ def test_readiness_check_reports_loaded_configuration(tmp_path) -> None:
         database_url=f"sqlite+aiosqlite:///{database_path}",
     )
 
-    with TestClient(create_app(settings=settings)) as client:
+    app = create_app(settings=settings)
+    app.dependency_overrides[get_events] = lambda: FakeEvents(True)
+    with TestClient(app) as client:
         response = client.get("/ready")
 
     assert response.status_code == 200
     assert response.json() == {
         "status": "ready",
         "environment": "test",
-        "checks": {"configuration": "ok", "database": "ok"},
+        "checks": {"configuration": "ok", "database": "ok", "redis": "ok"},
     }
 
 
@@ -43,12 +54,14 @@ def test_readiness_check_returns_503_when_database_is_unavailable(tmp_path) -> N
         database_url=f"sqlite+aiosqlite:///{database_path}",
     )
 
-    with TestClient(create_app(settings=settings)) as client:
+    app = create_app(settings=settings)
+    app.dependency_overrides[get_events] = lambda: FakeEvents(True)
+    with TestClient(app) as client:
         response = client.get("/ready")
 
     assert response.status_code == 503
     assert response.json() == {
         "status": "not_ready",
         "environment": "test",
-        "checks": {"configuration": "ok", "database": "failed"},
+        "checks": {"configuration": "ok", "database": "failed", "redis": "ok"},
     }

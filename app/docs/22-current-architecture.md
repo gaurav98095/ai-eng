@@ -67,8 +67,9 @@ containers talk to it through `host.docker.internal`.
 2. `POST /sessions/{id}/uploads` creates pending `files` rows and presigned
    targets. The browser PUTs bytes directly to Floci/AWS.
 3. `POST .../uploads/{file_id}/complete` verifies object metadata and queues
-   `{session_id, file_id}`. The ingestion worker extracts UTF-8 Markdown/plain
-   text into `chunks` rows.
+   `{session_id, file_id}`. The ingestion worker extracts Markdown/plain text,
+   PDF, and Word documents into `chunks` rows; the STT worker transcribes audio
+   and video into a durable transcript plus the same `chunks` rows.
 4. The embedding worker sends chunk text to `/embed`, stores vectors and the
    model identity, and marks file/session readiness.
 5. `POST /sessions/{id}/chat` stores the user and pending assistant rows and
@@ -76,8 +77,10 @@ containers talk to it through `host.docker.internal`.
    `/generate`, and persists the answer and sources. Poll `GET
    /sessions/{id}/chat` or use the event endpoint.
 
-The current upload flow supports `.md` and `.txt` only. STT, PDF/Office/image
-parsing, and source rendering in the frontend are not complete features.
+The upload flow accepts `.md`, `.txt`, `.pdf`, `.doc`, `.docx`, `.aac`, `.m4a`,
+`.mp3`, `.ogg`, `.wav`, `.mp4`, `.mov`, `.mkv`, and `.webm`. PDF/Word conversion
+uses Docling in the ingestion worker; audio/video requires a configured hosted
+STT service. Images and spreadsheet/presentation formats remain deferred.
 
 Authentication is local-development friendly and ownership is enforced on the
 session, upload, chat, and event routes. The synchronous search and answers
@@ -104,6 +107,11 @@ Do not copy queue URLs or infrastructure values into walkthroughs or another
 controlled deployment, but it is not needed for ordinary local development.
 Restart API/workers after changing settings; settings are cached at process
 startup.
+
+`config.yml` also selects the embedding, STT, and generation model names and
+their safe serving limits. Change `generation_model_name` to test a larger LLM
+only after checking that its tokenizer contract and GPU memory fit the selected
+model-service host; service URLs and tokens remain private environment values.
 
 ## Production status
 

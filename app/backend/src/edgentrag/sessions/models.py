@@ -72,8 +72,11 @@ class SessionFile(Base):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str] = mapped_column(String(255), nullable=False)
     size_bytes: Mapped[int] = mapped_column(nullable=False)
-    object_key: Mapped[str] = mapped_column("raw_key", String(512), unique=True, nullable=False)
+    object_key: Mapped[str] = mapped_column(
+        "raw_key", String(512), unique=True, nullable=False
+    )
     text_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False, default="document")
     chunk_count: Mapped[int] = mapped_column(nullable=False, default=0)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

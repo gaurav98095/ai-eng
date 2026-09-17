@@ -8,7 +8,7 @@ Run it locally from the repository root:
 ~~~bash
 python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
-.venv/bin/python -m pip install -e "./app/backend[dev]"
+.venv/bin/python -m pip install -e "./app/backend[dev,documents]"
 cp app/backend/.env.example app/backend/.env
 .venv/bin/alembic -c app/backend/alembic.ini upgrade head
 .venv/bin/python -m uvicorn edgentrag.api.app:app --reload
@@ -57,6 +57,11 @@ curl -s -X POST "http://127.0.0.1:8000/sessions/$SESSION_ID/uploads" \
 Real S3 upload URLs require EDGENTRAG_S3_BUCKET and AWS credentials from the
 standard AWS credential chain (or an EC2 instance role). Tests use fake storage
 and do not need AWS access.
+
+Uploads support Markdown/text, PDF/Word, and common audio/video formats. PDF
+and Word conversion runs in the ingestion worker image with the optional
+`documents` dependency; audio/video transcription requires the hosted STT URL
+and token described in `app/docs/model-service-hosting.md`.
 
 The editable installation is required. Application code lives in
 backend/src/edgentrag, which deliberately is not on Python's import path by

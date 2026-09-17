@@ -6,6 +6,8 @@ from typing import Literal
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from edgentrag.core.config import MappedYamlConfigSettingsSource
+
 
 class EmbeddingSettings(BaseSettings):
     """Configuration for model choice, accelerator, and service authentication."""
@@ -16,6 +18,29 @@ class EmbeddingSettings(BaseSettings):
         env_prefix="EDGENTRAG_EMBEDDING_",
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            MappedYamlConfigSettingsSource(
+                settings_cls,
+                {
+                    "embedding_model_name": "model_name",
+                    "embedding_device": "device",
+                },
+            ),
+            file_secret_settings,
+        )
 
     model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     device: Literal["auto", "cpu", "cuda"] = "auto"

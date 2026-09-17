@@ -7,6 +7,9 @@ import pytest
 from pydantic import ValidationError
 
 from edgentrag.core.config import Settings
+from edgentrag.embedding.settings import EmbeddingSettings
+from edgentrag.generation.settings import GenerationSettings
+from edgentrag.stt.settings import STTSettings
 
 
 @pytest.fixture(autouse=True)
@@ -78,6 +81,28 @@ def test_yaml_configuration_rejects_unknown_keys(monkeypatch, tmp_path: Path) ->
 
     with pytest.raises(ValueError, match="unknown configuration keys"):
         Settings(_env_file=None)
+
+
+def test_yaml_model_selection_is_shared_with_hosted_services(
+    monkeypatch, tmp_path: Path
+) -> None:
+    config_file = tmp_path / "config.yml"
+    config_file.write_text(
+        "\n".join(
+            [
+                "embedding_model_name: sentence-transformers/all-mpnet-base-v2",
+                "generation_model_name: Qwen/Qwen2.5-7B-Instruct",
+                "generation_context_window: 8192",
+                "stt_model_name: Systran/faster-whisper-large-v3",
+            ]
+        )
+    )
+    monkeypatch.setenv("EDGENTRAG_CONFIG_FILE", str(config_file))
+
+    assert EmbeddingSettings(_env_file=None).model_name.endswith("mpnet-base-v2")
+    assert GenerationSettings().model_name == "Qwen/Qwen2.5-7B-Instruct"
+    assert GenerationSettings().context_window == 8192
+    assert STTSettings().model_name.endswith("large-v3")
 
 
 @pytest.mark.parametrize("embedding_colab", [True, False])

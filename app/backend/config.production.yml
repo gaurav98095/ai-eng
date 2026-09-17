@@ -21,7 +21,22 @@ max_upload_bytes: 20971520
 max_text_extract_bytes: 20971520
 use_colab_for_embedding: true
 use_colab_for_llm: true
+use_colab_for_stt: true
 generation_request_timeout_seconds: 300
+stt_request_timeout_seconds: 600
+max_audio_upload_bytes: 536870912
+# Select model names and accelerator settings here before building/deploying a
+# model-service image. Keep service URLs and tokens in the secret environment.
+embedding_model_name: sentence-transformers/all-MiniLM-L6-v2
+embedding_device: auto
+generation_model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+generation_device: auto
+generation_max_input_tokens: 1536
+generation_context_window: 2048
+stt_model_name: Systran/faster-whisper-small.en
+stt_device: auto
+stt_compute_type: auto
+stt_max_upload_bytes: 536870912
 embedding_batch_size: 32
 embedding_request_timeout_seconds: 180
 search_max_chunks: 5000

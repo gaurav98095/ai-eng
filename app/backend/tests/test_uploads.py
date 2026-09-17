@@ -10,7 +10,11 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from edgentrag.api.app import create_app
-from edgentrag.api.dependencies import get_ingestion_queue, get_object_storage
+from edgentrag.api.dependencies import (
+    get_ingestion_queue,
+    get_object_storage,
+    get_stt_queue,
+)
 from edgentrag.core.config import Settings
 from edgentrag.ingestion.queue import QueueUnavailable
 from edgentrag.sessions.models import ChatSession, SessionFile
@@ -57,6 +61,10 @@ class FakeIngestionQueue:
         if self.unavailable:
             raise QueueUnavailable("test queue unavailable")
         self.requests.append({"session_id": session_id, "file_id": file_id})
+
+
+class FakeSTTQueue(FakeIngestionQueue):
+    """Record transcription jobs without contacting SQS."""
 
 
 def migrate_database(database_url: str) -> None:
@@ -147,6 +155,39 @@ def test_upload_rejects_unsupported_extensions_without_signing(tmp_path) -> None
 
     assert response.status_code == 415
     assert storage.requests == []
+
+
+def test_upload_accepts_pdf_and_records_document_kind(tmp_path) -> None:
+    database_path = tmp_path / "pdf-upload.db"
+    database_url = f"sqlite+aiosqlite:///{database_path}"
+    migrate_database(database_url)
+    storage = FakeObjectStorage()
+    app = create_app(settings=Settings(environment="test", database_url=database_url))
+    app.dependency_overrides[get_object_storage] = lambda: storage
+
+    with TestClient(app) as client:
+        session_id = client.post("/sessions").json()["session_id"]
+        response = client.post(
+            f"/sessions/{session_id}/uploads",
+            json={
+                "files": [
+                    {
+                        "filename": "report.pdf",
+                        "content_type": "application/pdf",
+                        "size_bytes": 4096,
+                    }
+                ]
+            },
+        )
+
+    assert response.status_code == 201
+    engine = create_engine(f"sqlite:///{database_path}")
+    try:
+        with Session(engine) as db:
+            file_record = db.get(SessionFile, response.json()["targets"][0]["file_id"])
+            assert file_record is not None and file_record.kind == "document"
+    finally:
+        engine.dispose()
 
 
 def test_upload_rejects_files_larger_than_the_configured_limit(tmp_path) -> None:
@@ -265,6 +306,55 @@ def test_upload_completion_checks_s3_then_queues_once(tmp_path) -> None:
             assert file_record.status == "uploaded"
     finally:
         engine.dispose()
+
+
+def test_audio_upload_queues_stt_after_storage_confirmation(tmp_path) -> None:
+    database_path = tmp_path / "audio-upload.db"
+    database_url = f"sqlite+aiosqlite:///{database_path}"
+    migrate_database(database_url)
+    app = create_app(
+        settings=Settings(
+            environment="test",
+            database_url=database_url,
+            stt_service_url="https://stt.example.test",
+            stt_api_token="test-token",
+        )
+    )
+    storage = FakeObjectStorage()
+    ingestion_queue = FakeIngestionQueue()
+    stt_queue = FakeSTTQueue()
+    app.dependency_overrides[get_object_storage] = lambda: storage
+    app.dependency_overrides[get_ingestion_queue] = lambda: ingestion_queue
+    app.dependency_overrides[get_stt_queue] = lambda: stt_queue
+
+    with TestClient(app) as client:
+        session_id = client.post("/sessions").json()["session_id"]
+        target = client.post(
+            f"/sessions/{session_id}/uploads",
+            json={
+                "files": [
+                    {
+                        "filename": "meeting.mp3",
+                        "content_type": "audio/mpeg",
+                        "size_bytes": 4096,
+                    }
+                ]
+            },
+        ).json()["targets"][0]
+        object_key = str(storage.requests[0]["key"])
+        storage.metadata_by_key[object_key] = ObjectMetadata(
+            size_bytes=4096,
+            content_type="audio/mpeg",
+        )
+        completed = client.post(
+            f"/sessions/{session_id}/uploads/{target['file_id']}/complete"
+        )
+
+    assert completed.status_code == 202
+    assert stt_queue.requests == [
+        {"session_id": session_id, "file_id": target["file_id"]}
+    ]
+    assert ingestion_queue.requests == []
 
 
 @pytest.mark.parametrize("content_type", ["application/octet-stream", "text/plain"])

@@ -21,7 +21,7 @@ but they are independent processes.
 
 ## Supported input in this component
 
-For now, only `.md` and `.txt` files are accepted:
+The original component accepted only `.md` and `.txt` files:
 
 - Markdown must declare `text/markdown`.
 - Plain text must declare `text/plain`.
@@ -33,10 +33,10 @@ For now, only `.md` and `.txt` files are accepted:
   (also 20 MiB by default). It reads one extra byte to detect overflow without
   loading an oversized object into memory.
 
-Other extensions are rejected with `415` when requesting an upload target.
-PDF, Office, audio, and video parsers can be added as later components. The
-worker limit is an independent guard in case an object changes after upload
-confirmation or configuration differs between API and worker.
+The current implementation additionally routes PDF/Word documents through
+Docling and audio/video through the STT worker. The worker limit remains an
+independent guard in case an object changes after upload confirmation or
+configuration differs between API and worker.
 
 ## Chunking and persistence
 

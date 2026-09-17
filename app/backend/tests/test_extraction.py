@@ -1,5 +1,8 @@
 """Tests for text validation and chunk-boundary behavior."""
 
+import sys
+from types import ModuleType
+
 import pytest
 
 from edgentrag.ingestion.extraction import (
@@ -44,6 +47,29 @@ def test_extractor_rejects_unsupported_or_invalid_documents(
 ) -> None:
     with pytest.raises(DocumentExtractionError):
         extract_text(filename=filename, content_type=content_type, content=content)
+
+
+def test_extractor_uses_docling_for_pdf(monkeypatch) -> None:
+    class FakeDocument:
+        def export_to_markdown(self) -> str:
+            return "# Converted PDF\n\nDocument body"
+
+    class FakeConverter:
+        def convert(self, source: str):
+            assert source.endswith(".pdf")
+            return type("Result", (), {"document": FakeDocument()})()
+
+    docling = ModuleType("docling")
+    converter = ModuleType("docling.document_converter")
+    converter.DocumentConverter = FakeConverter
+    monkeypatch.setitem(sys.modules, "docling", docling)
+    monkeypatch.setitem(sys.modules, "docling.document_converter", converter)
+
+    assert extract_text(
+        filename="report.pdf",
+        content_type="application/pdf",
+        content=b"%PDF-example",
+    ) == "# Converted PDF\n\nDocument body"
 
 
 def test_chunker_rejects_invalid_overlap() -> None:

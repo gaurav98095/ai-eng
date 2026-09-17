@@ -4,6 +4,7 @@ export type SessionFile = {
   file_id: string;
   filename: string;
   content_type: string;
+  kind: "document" | "audio";
   size_bytes: number;
   status: string;
 };

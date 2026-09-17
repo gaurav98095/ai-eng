@@ -1,5 +1,7 @@
 """Typed configuration loaded from YAML, then environment overrides."""
 
+import os
+from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
@@ -13,6 +15,34 @@ from pydantic_settings import (
 )
 
 DEFAULT_CONFIG_FILE = Path(__file__).resolve().parents[3] / "config.yml"
+MODEL_SERVICE_CONFIG_KEYS = {
+    "embedding_model_name",
+    "embedding_device",
+    "generation_model_name",
+    "generation_device",
+    "generation_max_input_tokens",
+    "generation_context_window",
+    "stt_model_name",
+    "stt_device",
+    "stt_compute_type",
+    "stt_max_upload_bytes",
+}
+
+
+def configured_yaml_file() -> Path:
+    """Return the selected shared YAML profile without treating it as a setting."""
+    return Path(os.getenv("EDGENTRAG_CONFIG_FILE", DEFAULT_CONFIG_FILE))
+
+
+def load_yaml_mapping(config_file: Path) -> dict[str, Any]:
+    """Read one safe YAML mapping, rejecting a malformed top-level document."""
+    if not config_file.is_file():
+        return {}
+    with config_file.open(encoding="utf-8") as handle:
+        values = yaml.safe_load(handle) or {}
+    if not isinstance(values, dict):
+        raise ValueError(f"configuration file must be a mapping: {config_file}")
+    return values
 
 
 class YamlConfigSettingsSource(PydanticBaseSettingsSource):
@@ -29,21 +59,42 @@ class YamlConfigSettingsSource(PydanticBaseSettingsSource):
         return None, field_name, False
 
     def __call__(self) -> dict[str, Any]:
-        if not self.config_file.is_file():
-            return {}
-        with self.config_file.open(encoding="utf-8") as config_file:
-            values = yaml.safe_load(config_file) or {}
-        if not isinstance(values, dict):
-            raise ValueError(
-                f"configuration file must be a mapping: {self.config_file}"
-            )
-        unknown = set(values) - set(self.settings_cls.model_fields)
+        values = load_yaml_mapping(self.config_file)
+        known_keys = set(self.settings_cls.model_fields) | MODEL_SERVICE_CONFIG_KEYS
+        unknown = set(values) - known_keys
         if unknown:
             names = ", ".join(sorted(unknown))
             raise ValueError(
                 f"unknown configuration keys in {self.config_file}: {names}"
             )
-        return values
+        return {
+            key: value
+            for key, value in values.items()
+            if key in self.settings_cls.model_fields
+        }
+
+
+class MappedYamlConfigSettingsSource(PydanticBaseSettingsSource):
+    """Map shared YAML keys onto a separately hosted model-service settings type."""
+
+    def __init__(
+        self, settings_cls: type[BaseSettings], key_map: Mapping[str, str]
+    ) -> None:
+        super().__init__(settings_cls)
+        self.key_map = key_map
+
+    def get_field_value(
+        self, field: Any, field_name: str
+    ) -> tuple[None, str, bool]:
+        return None, field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        values = load_yaml_mapping(configured_yaml_file())
+        return {
+            field_name: values[yaml_key]
+            for yaml_key, field_name in self.key_map.items()
+            if yaml_key in values
+        }
 
 
 class Settings(BaseSettings):
@@ -71,9 +122,7 @@ class Settings(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         """Use explicit values and environment settings ahead of YAML defaults."""
-        config_file = Path(
-            env_settings.env_vars.get("edgentrag_config_file", DEFAULT_CONFIG_FILE)
-        )
+        config_file = configured_yaml_file()
         return (
             init_settings,
             env_settings,
@@ -112,10 +161,17 @@ class Settings(BaseSettings):
     max_text_extract_bytes: int = Field(default=20 * 1024 * 1024, gt=0)
     use_colab_for_embedding: bool = True
     use_colab_for_llm: bool = True
+    use_colab_for_stt: bool = True
     colab_embedding_service_url: AnyHttpUrl | None = None
     colab_generation_service_url: AnyHttpUrl | None = None
     lightning_embedding_service_url: AnyHttpUrl | None = None
     lightning_generation_service_url: AnyHttpUrl | None = None
+    colab_stt_service_url: AnyHttpUrl | None = None
+    lightning_stt_service_url: AnyHttpUrl | None = None
+    stt_service_url: AnyHttpUrl | None = None
+    stt_api_token: SecretStr = SecretStr("")
+    stt_request_timeout_seconds: float = Field(default=600, gt=0, le=900)
+    max_audio_upload_bytes: int = Field(default=512 * 1024 * 1024, gt=0)
     generation_service_url: AnyHttpUrl | None = None
     generation_api_token: SecretStr = SecretStr("")
     generation_request_timeout_seconds: float = Field(default=300, gt=0, le=600)
@@ -169,6 +225,15 @@ class Settings(BaseSettings):
             if self.use_colab_for_llm
             else self.lightning_generation_service_url
         )
+        if self.use_colab_for_stt:
+            self.stt_service_url = self.colab_stt_service_url or self.stt_service_url
+        else:
+            if self.lightning_stt_service_url is None:
+                raise ValueError(
+                    "lightning_stt_service_url is required when "
+                    "use_colab_for_stt is false"
+                )
+            self.stt_service_url = self.lightning_stt_service_url
         has_url = self.embedding_service_url is not None
         has_token = bool(self.embedding_api_token.get_secret_value())
         if has_url != has_token:
@@ -190,6 +255,12 @@ class Settings(BaseSettings):
             raise ValueError(
                 "generation_service_url and generation_api_token "
                 "must be configured together"
+            )
+        has_stt_url = self.stt_service_url is not None
+        has_stt_token = bool(self.stt_api_token.get_secret_value())
+        if has_stt_url != has_stt_token:
+            raise ValueError(
+                "stt_service_url and stt_api_token must be configured together"
             )
         return self
 

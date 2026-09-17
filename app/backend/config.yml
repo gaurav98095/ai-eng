@@ -23,7 +23,24 @@ max_text_extract_bytes: 20971520
 # configured there too.
 use_colab_for_embedding: true
 use_colab_for_llm: true
+use_colab_for_stt: true
 generation_request_timeout_seconds: 300
+stt_request_timeout_seconds: 600
+max_audio_upload_bytes: 536870912
+# Model-service defaults. For a larger LLM, set generation_model_name to a
+# compatible Hugging Face model and raise its context/input limits only when
+# the serving GPU has enough VRAM. Other safe knobs include *_device (auto,
+# cpu, cuda), stt_compute_type (int8, float16), and embedding_model_name.
+embedding_model_name: sentence-transformers/all-MiniLM-L6-v2
+embedding_device: auto
+generation_model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+generation_device: auto
+generation_max_input_tokens: 1536
+generation_context_window: 2048
+stt_model_name: Systran/faster-whisper-small.en
+stt_device: auto
+stt_compute_type: auto
+stt_max_upload_bytes: 536870912
 embedding_batch_size: 32
 embedding_request_timeout_seconds: 180
 search_max_chunks: 5000

@@ -4,5 +4,5 @@ WORKDIR /opt/edgentrag
 COPY pyproject.toml README.md ./
 COPY config.yml config.production.yml ./
 COPY src ./src
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[stt]"
 CMD ["python", "-m", "edgentrag.stt.worker"]

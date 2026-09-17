@@ -101,6 +101,42 @@ async def search_session(
     if provider is None:
         raise EmbeddingServiceUnavailable("embedding service is not configured")
 
+    dialect = database._engine.dialect.name
+    # Reject a missing, empty, or over-limit local session before spending a
+    # remote embedding request. PostgreSQL still needs the query model for its
+    # compatible-vector predicate, but can at least reject a missing session.
+    async with database.sessions() as database_session:
+        if await database_session.get(ChatSession, session_id) is None:
+            raise SessionNotFound("session not found")
+        if dialect != "postgresql":
+            candidate_count = int(
+                (
+                    await database_session.scalar(
+                        select(func.count())
+                        .select_from(DocumentChunk)
+                        .join(
+                            SessionFile,
+                            DocumentChunk.session_file_id == SessionFile.id,
+                        )
+                        .where(
+                            SessionFile.session_id == session_id,
+                            SessionFile.status == "ready",
+                            DocumentChunk.embedding_model.is_not(None),
+                        )
+                    )
+                )
+                or 0
+            )
+            if candidate_count > max_chunks:
+                raise SearchLimitExceeded(
+                    "session exceeds the configured search chunk limit"
+                )
+            if candidate_count == 0:
+                raise SearchNotReady(
+                    "no embedded chunks are ready; upload with embeddings enabled "
+                    "and wait for ingestion"
+                )
+
     # Query embeddings are computed before opening the DB transaction so a slow
     # remote provider cannot hold a connection.  PostgreSQL can then execute
     # the ANN/vector operator in the database; SQLite retains the bounded
@@ -113,7 +149,6 @@ async def search_session(
     if query_vector is None:
         raise EmbeddingServiceUnavailable("embedding service returned an invalid query")
 
-    dialect = database._engine.dialect.name
     if dialect == "postgresql" and hasattr(DocumentChunk.embedding, "cosine_distance"):
         async with database.sessions() as database_session:
             if await database_session.get(ChatSession, session_id) is None:
@@ -132,7 +167,8 @@ async def search_session(
             searched = int((await database_session.scalar(compatible)) or 0)
             if searched == 0:
                 raise SearchNotReady(
-                    "no compatible embeddings; re-upload documents using the current model"
+                    "no compatible embeddings; re-upload documents using the "
+                    "current model"
                 )
             distance = DocumentChunk.embedding.cosine_distance(query_vector)
             rows = await database_session.execute(
@@ -159,7 +195,9 @@ async def search_session(
                 for chunk, filename, raw_distance in rows
             ]
         if not matches:
-            raise SearchNotReady("no compatible embeddings; re-upload documents using the current model")
+            raise SearchNotReady(
+                "no compatible embeddings; re-upload documents using the current model"
+            )
         return SearchResponse(
             session_id=session_id,
             query=query,

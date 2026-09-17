@@ -6,9 +6,36 @@ from typing import Literal
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from edgentrag.core.config import MappedYamlConfigSettingsSource
+
 
 class STTSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="EDGENTRAG_STT_", extra="ignore")
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            MappedYamlConfigSettingsSource(
+                settings_cls,
+                {
+                    "stt_model_name": "model_name",
+                    "stt_device": "device",
+                    "stt_compute_type": "compute_type",
+                    "stt_max_upload_bytes": "max_upload_bytes",
+                },
+            ),
+            file_secret_settings,
+        )
 
     model_name: str = "Systran/faster-whisper-small.en"
     device: Literal["auto", "cpu", "cuda"] = "auto"

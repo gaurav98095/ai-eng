@@ -41,11 +41,12 @@ PostgreSQL.
   file/session state. Current local Compose enables this queue path; direct
   embedding is used only when the embedding queue URL is unset.
 
-The STT queue worker validates jobs but deliberately leaves valid work
-unacknowledged until a durable transcript callback is configured; invalid
-payloads are acknowledged and discarded. For hosted inference experiments,
-`edgentrag.stt.app` exposes an authenticated `/transcribe` API and is launched
-by the Colab and Lightning model-service notebooks on port 8002.
+The STT queue worker downloads confirmed audio/video objects, sends them to the
+authenticated hosted `/transcribe` service, persists the returned transcript,
+and stores its chunks through the normal embedding lifecycle. Invalid payloads
+and permanently rejected media are acknowledged; temporary provider/storage
+failures remain available for retry. The hosted service is launched by the
+Colab and Lightning model-service notebooks on port 8002.
 
 The deployment templates intentionally retain `REPLACE_*` values: networking,
 IAM, secrets, and ECR image identifiers are account-specific release inputs.

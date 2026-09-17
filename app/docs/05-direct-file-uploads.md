@@ -44,8 +44,9 @@ unsupported extensions, and compares the declared size with the configured
 maximum. It stores the filename for display, but constructs the S3 object key
 from server-generated IDs. User-provided names never become storage paths.
 
-The current upload flow supports only `.md` and `.txt` files. Other
-file types are rejected until their parser components are added.
+The current implementation also accepts PDF/Word documents and supported
+audio/video media. See the current architecture guide for the full list and
+which worker owns each processing path.
 
 The declared size and MIME type come from the client and are not proof of what
 the bytes contain. They are useful for limits and signing; the completion
