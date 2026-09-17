@@ -18,7 +18,9 @@ and several reliability issues remain; see [current limitations](#current-limita
 - Run embedding and generation services separately on Colab or Lightning AI.
 
 PDFs, images, and audio transcription are not supported by the current upload
-flow. The STT worker is a skeleton, not a working transcription service.
+flow. The queue-based STT worker remains a skeleton, while the hosted
+`edgentrag.stt.app` service provides authenticated `/transcribe` inference for
+the Colab and Lightning model-service notebooks.
 
 ## How the pieces fit together
 
