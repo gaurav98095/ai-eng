@@ -54,21 +54,21 @@ export function SessionWorkspace({ baseUrl }: Props) {
   return (
     <section className="workspace" aria-label="Chat workspace">
       <div className="workspace-head">
-        <div><p className="eyebrow">SESSION</p><p className="session-id">{sessionId || "No session selected"}</p></div>
-        <button type="button" onClick={() => void startSession()}>New session</button>
+        <div><p className="eyebrow">ACTIVE WORKSPACE</p><h3>{sessionId ? "Document conversation" : "Start a workspace"}</h3>{sessionId && <p className="session-id">{sessionId}</p>}</div>
+        <button className="secondary" type="button" onClick={() => void startSession()}><span>＋</span> New session</button>
       </div>
       <div className="messages">
-        {messages.length === 0 && <p className="muted">Create a session to begin.</p>}
+        {messages.length === 0 && <div className="empty-state"><span className="empty-icon">✦</span><p>{sessionId ? "Your conversation starts here." : "Create a session to begin."}</p><small>{sessionId ? "Upload a document, then ask anything about it." : "A private space for your documents and questions."}</small></div>}
         {messages.map((message) => (
           <article className={`message ${message.role}`} key={message.id}>
-            <span>{message.role === "user" ? "You" : "EdgentRAG"}</span>
+            <span className="message-label">{message.role === "user" ? "You" : "✦ EdgentRAG"}</span>
             <p>{message.content || (message.status === "pending" ? "Waiting for the worker…" : "")}</p>
           </article>
         ))}
       </div>
       <form className="composer" onSubmit={submit}>
-        <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask about your documents…" disabled={!sessionId} />
-        <button type="submit" disabled={!sessionId || !draft.trim()}>Send</button>
+        <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder={sessionId ? "Ask about your documents…" : "Create a session to start chatting"} disabled={!sessionId} />
+        <button className="primary send" type="submit" disabled={!sessionId || !draft.trim()}>Send <span>↑</span></button>
       </form>
       {error && <p className="error" role="alert">{error}</p>}
       {sessionId && <UploadPanel baseUrl={baseUrl} sessionId={sessionId} />}

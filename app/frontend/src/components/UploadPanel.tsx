@@ -48,10 +48,10 @@ export function UploadPanel({ baseUrl, sessionId }: Props) {
 
   return (
     <section className="upload-panel" aria-label="Document uploads">
-      <div className="workspace-head"><div><p className="eyebrow">DOCUMENTS</p><p className="muted">Upload Markdown or plain text files</p></div>
-        <label className="button"><input type="file" multiple accept=".md,.txt,text/markdown,text/plain" disabled={busy} onChange={(event) => void upload(event.target.files)} />{busy ? "Uploading…" : "Choose files"}</label>
+      <div className="workspace-head"><div><p className="eyebrow">SOURCE LIBRARY</p><h3>Your documents</h3><p className="muted">Markdown and plain text files</p></div>
+        <label className="button"><input type="file" multiple accept=".md,.txt,text/markdown,text/plain" disabled={busy} onChange={(event) => void upload(event.target.files)} /><span>＋</span>{busy ? "Uploading…" : "Add documents"}</label>
       </div>
-      {files.length === 0 ? <p className="muted">No files uploaded yet.</p> : <ul className="file-list">{files.map((file) => <li key={file.file_id}><span>{file.filename}</span><span className={`status ${file.status}`}>{file.status}</span></li>)}</ul>}
+      {files.length === 0 ? <div className="drop-hint">Drop files here or use the button above</div> : <ul className="file-list">{files.map((file) => <li key={file.file_id}><span className="file-name"><span className="file-icon">↗</span>{file.filename}</span><span className={`status ${file.status}`}>{file.status}</span></li>)}</ul>}
       {error && <p className="error" role="alert">{error}</p>}
     </section>
   );
