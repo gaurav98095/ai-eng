@@ -8,6 +8,7 @@ type Props = { baseUrl: string };
 
 export function SessionWorkspace({ baseUrl }: Props) {
   const [sessionId, setSessionId] = useState("");
+  const [recentSessions, setRecentSessions] = useState<string[]>(() => JSON.parse(window.localStorage.getItem("edgentrag.sessions") || "[]"));
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
@@ -16,12 +17,15 @@ export function SessionWorkspace({ baseUrl }: Props) {
     try {
       const session = await createSession(baseUrl);
       setSessionId(session.session_id);
+      setRecentSessions((current) => { const next = [session.session_id, ...current.filter((id) => id !== session.session_id)].slice(0, 8); window.localStorage.setItem("edgentrag.sessions", JSON.stringify(next)); return next; });
       setMessages([]);
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not create session.");
     }
   };
+
+  const selectSession = (id: string) => { setSessionId(id); setError(""); };
 
   useEffect(() => {
     if (!sessionId) return;
@@ -55,7 +59,7 @@ export function SessionWorkspace({ baseUrl }: Props) {
     <section className="workspace" aria-label="Chat workspace">
       <div className="workspace-head">
         <div><p className="eyebrow">ACTIVE WORKSPACE</p><h3>{sessionId ? "Document conversation" : "Start a workspace"}</h3>{sessionId && <p className="session-id">{sessionId}</p>}</div>
-        <button className="secondary" type="button" onClick={() => void startSession()}><span>＋</span> New session</button>
+        <div className="workspace-actions"><select aria-label="Recent sessions" value={sessionId} onChange={(event) => selectSession(event.target.value)}><option value="">Recent sessions</option>{recentSessions.map((id) => <option key={id} value={id}>{id.slice(0, 8)}…</option>)}</select><button className="secondary" type="button" onClick={() => void startSession()}><span>＋</span> New session</button></div>
       </div>
       <div className="messages">
         {messages.length === 0 && <div className="empty-state"><span className="empty-icon">✦</span><p>{sessionId ? "Your conversation starts here." : "Create a session to begin."}</p><small>{sessionId ? "Upload a document, then ask anything about it." : "A private space for your documents and questions."}</small></div>}

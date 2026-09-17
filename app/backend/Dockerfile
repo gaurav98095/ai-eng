@@ -5,6 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /opt/edgentrag
 
 COPY pyproject.toml README.md ./
+COPY config.yml config.production.yml ./
 COPY src ./src
 COPY alembic.ini ./
 COPY migrations ./migrations

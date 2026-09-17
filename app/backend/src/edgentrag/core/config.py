@@ -1,18 +1,57 @@
-"""Typed configuration loaded from the environment."""
+"""Typed configuration loaded from YAML, then environment overrides."""
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
+import yaml
 from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+
+DEFAULT_CONFIG_FILE = Path(__file__).resolve().parents[3] / "config.yml"
+
+
+class YamlConfigSettingsSource(PydanticBaseSettingsSource):
+    """Load committed, non-sensitive defaults from a YAML mapping."""
+
+    def __init__(self, settings_cls: type[BaseSettings], config_file: Path) -> None:
+        super().__init__(settings_cls)
+        self.config_file = config_file
+
+    def get_field_value(
+        self, field: Any, field_name: str
+    ) -> tuple[None, str, bool]:
+        """YAML is read as one mapping in ``__call__``."""
+        return None, field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        if not self.config_file.is_file():
+            return {}
+        with self.config_file.open(encoding="utf-8") as config_file:
+            values = yaml.safe_load(config_file) or {}
+        if not isinstance(values, dict):
+            raise ValueError(
+                f"configuration file must be a mapping: {self.config_file}"
+            )
+        unknown = set(values) - set(self.settings_cls.model_fields)
+        if unknown:
+            names = ", ".join(sorted(unknown))
+            raise ValueError(
+                f"unknown configuration keys in {self.config_file}: {names}"
+            )
+        return values
 
 
 class Settings(BaseSettings):
     """Configuration shared by the API and future worker processes.
 
-    Environment variables use the EDGENTRAG_ prefix. For example,
-    EDGENTRAG_LOG_LEVEL=DEBUG overrides the default log level.
+    ``config.yml`` provides committed, non-sensitive defaults. Environment
+    variables and the local ``.env`` file use the EDGENTRAG_ prefix and take
+    precedence, so they are reserved for secrets and deployment overrides.
     """
 
     model_config = SettingsConfigDict(
@@ -21,6 +60,27 @@ class Settings(BaseSettings):
         env_prefix="EDGENTRAG_",
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Use explicit values and environment settings ahead of YAML defaults."""
+        config_file = Path(
+            env_settings.env_vars.get("edgentrag_config_file", DEFAULT_CONFIG_FILE)
+        )
+        return (
+            init_settings,
+            env_settings,
+            dotenv_settings,
+            YamlConfigSettingsSource(settings_cls, config_file),
+            file_secret_settings,
+        )
 
     environment: Literal["local", "test", "production"] = "local"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -73,13 +133,17 @@ class Settings(BaseSettings):
                 "production requires a PostgreSQL database_url"
             )
         if self.environment == "production" and self.aws_endpoint_url:
-            raise ValueError("aws_endpoint_url is only valid for local Floci development")
+            raise ValueError(
+                "aws_endpoint_url is only valid for local Floci development"
+            )
         if self.environment == "production":
             required_queues = {
                 "ingestion_queue_url": self.ingestion_queue_url,
                 "chat_queue_url": self.chat_queue_url,
             }
-            missing_queues = [name for name, value in required_queues.items() if not value]
+            missing_queues = [
+                name for name, value in required_queues.items() if not value
+            ]
             if missing_queues:
                 raise ValueError(
                     "production requires queue URLs: " + ", ".join(missing_queues)
@@ -112,7 +176,11 @@ class Settings(BaseSettings):
                 "embedding_service_url and embedding_api_token "
                 "must be configured together"
             )
-        if self.environment == "production" and has_url and not self.embedding_queue_url:
+        if (
+            self.environment == "production"
+            and has_url
+            and not self.embedding_queue_url
+        ):
             raise ValueError(
                 "production requires embedding_queue_url when embedding is configured"
             )

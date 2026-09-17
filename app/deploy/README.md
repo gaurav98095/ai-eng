@@ -5,6 +5,10 @@ production pipeline creates RDS/ElastiCache/SQS/Cognito through IaC and injects
 values through Secrets Manager/SSM. Apply migrations once before switching the
 API or workers to a new release.
 
+Container images include `backend/config.production.yml` for non-sensitive
+production defaults. The production Compose overlay selects that profile; it
+does not replace the deployment's resource-identifier or secret injection.
+
 Worker task definitions are intentionally separate: ingestion persists chunks,
 embedding writes vectors, and chat produces answers. Register
 `ecs-embedding-task.json` as its own ECS service when

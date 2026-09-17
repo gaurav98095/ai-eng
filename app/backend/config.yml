@@ -1,0 +1,29 @@
+# Committed, non-sensitive application defaults.
+#
+# Environment variables and backend/.env override these values. Keep tokens,
+# passwords, private tunnel URLs, and deployment-specific service addresses in
+# .env or the deployment secret manager.
+environment: local
+log_level: INFO
+db_pool_size: 10
+db_max_overflow: 5
+redis_tls: false
+history_turns: 8
+aws_region: ap-south-1
+aws_endpoint_url: http://localhost:4566
+queue_wait_seconds: 20
+queue_visibility_timeout_seconds: 900
+queue_batch_size: 10
+queue_max_receives: 5
+sse_ticket_seconds: 60
+upload_url_ttl_seconds: 900
+max_upload_bytes: 20971520
+max_text_extract_bytes: 20971520
+# Override either switch in .env only when its selected private service URL is
+# configured there too.
+use_colab_for_embedding: true
+use_colab_for_llm: true
+generation_request_timeout_seconds: 300
+embedding_batch_size: 32
+embedding_request_timeout_seconds: 180
+search_max_chunks: 5000

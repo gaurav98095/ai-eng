@@ -1,6 +1,7 @@
 """Tests for typed environment configuration."""
 
 import os
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -17,13 +18,66 @@ def isolated_settings_environment(monkeypatch):
 
 
 def test_settings_have_safe_local_defaults() -> None:
-    """A new developer can run the API without an environment file."""
+    """A new developer can run the API with committed YAML defaults."""
     settings = Settings(_env_file=None)
 
     assert settings.environment == "local"
     assert settings.log_level == "INFO"
     assert settings.use_colab_for_embedding is True
     assert settings.use_colab_for_llm is True
+
+
+def test_yaml_configuration_is_loaded_and_environment_takes_precedence(
+    monkeypatch, tmp_path: Path
+) -> None:
+    config_file = tmp_path / "config.yml"
+    config_file.write_text("history_turns: 12\nlog_level: WARNING\n")
+    monkeypatch.setenv("EDGENTRAG_CONFIG_FILE", str(config_file))
+    monkeypatch.setenv("EDGENTRAG_LOG_LEVEL", "DEBUG")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.history_turns == 12
+    assert settings.log_level == "DEBUG"
+
+
+def test_dotenv_configuration_takes_precedence_over_yaml(
+    monkeypatch, tmp_path: Path
+) -> None:
+    config_file = tmp_path / "config.yml"
+    config_file.write_text("log_level: WARNING\n")
+    dotenv_file = tmp_path / ".env"
+    dotenv_file.write_text("EDGENTRAG_LOG_LEVEL=ERROR\n")
+    monkeypatch.setenv("EDGENTRAG_CONFIG_FILE", str(config_file))
+
+    settings = Settings(_env_file=dotenv_file)
+
+    assert settings.log_level == "ERROR"
+
+
+def test_production_yaml_profile_has_safe_defaults(monkeypatch) -> None:
+    config_file = Path(__file__).resolve().parents[1] / "config.production.yml"
+    monkeypatch.setenv("EDGENTRAG_CONFIG_FILE", str(config_file))
+
+    settings = Settings(
+        _env_file=None,
+        ingestion_queue_url="https://sqs.example.test/ingestion",
+        chat_queue_url="https://sqs.example.test/chat",
+    )
+
+    assert settings.environment == "production"
+    assert settings.redis_tls is True
+    assert settings.aws_endpoint_url is None
+    assert settings.db_pool_size == 20
+
+
+def test_yaml_configuration_rejects_unknown_keys(monkeypatch, tmp_path: Path) -> None:
+    config_file = tmp_path / "config.yml"
+    config_file.write_text("not_a_setting: value\n")
+    monkeypatch.setenv("EDGENTRAG_CONFIG_FILE", str(config_file))
+
+    with pytest.raises(ValueError, match="unknown configuration keys"):
+        Settings(_env_file=None)
 
 
 @pytest.mark.parametrize("embedding_colab", [True, False])

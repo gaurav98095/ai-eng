@@ -88,14 +88,22 @@ safe for multi-user production use.
 
 - Compose owns local service addresses, Floci endpoint, bucket, queue URLs,
   database, Redis, and dummy local AWS credentials.
-- `backend/.env` owns private model URLs/tokens and tuning values.
-- `core/config.py` owns typed defaults and production validation.
+- `backend/config.yml` owns committed, non-sensitive application defaults and
+  tuning values.
+- `backend/config.production.yml` owns the corresponding production defaults;
+  production containers select it through `EDGENTRAG_CONFIG_FILE`.
+- `backend/.env` owns passwords, tokens, and private model URLs. Environment
+  variables override YAML for deployment-specific settings.
+- `core/config.py` owns typed loading, source precedence, and production
+  validation.
 - Terraform/deployment templates own production resource identifiers, but are
   scaffolding and do not yet perform a complete rollout.
 
 Do not copy queue URLs or infrastructure values into walkthroughs or another
-`.env` file. Restart API/workers after changing settings; settings are cached
-at process startup.
+`.env` file. `EDGENTRAG_CONFIG_FILE` may select an alternate YAML file for a
+controlled deployment, but it is not needed for ordinary local development.
+Restart API/workers after changing settings; settings are cached at process
+startup.
 
 ## Production status
 

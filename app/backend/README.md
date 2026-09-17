@@ -61,8 +61,14 @@ and do not need AWS access.
 The editable installation is required. Application code lives in
 backend/src/edgentrag, which deliberately is not on Python's import path by
 default. Installing the project makes the package importable and ensures local
-development behaves like a deployed package. Settings load app/backend/.env,
+development behaves like a deployed package. Settings load committed,
+non-sensitive defaults from `app/backend/config.yml`, then apply environment
+variables and `app/backend/.env` as higher-priority secret/private overrides,
 independent of the shell's current directory.
+
+Production images include `config.production.yml`. The production Compose
+overlay selects it with `EDGENTRAG_CONFIG_FILE`; the deployment must still
+inject its resource identifiers and secrets.
 
 For a one-off run without installing the project, point Uvicorn at the source
 directory explicitly:

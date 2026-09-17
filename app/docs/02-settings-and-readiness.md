@@ -28,18 +28,20 @@ backend/
 
 ## Settings are a boundary
 
-All configuration goes through one Settings class. It reads environment
-variables with the EDGENTRAG_ prefix:
+All configuration goes through one Settings class. The current implementation
+loads committed, non-sensitive defaults from `backend/config.yml`; environment
+variables with the EDGENTRAG_ prefix and local `.env` entries override them:
 
 ~~~ini
 EDGENTRAG_ENVIRONMENT=local
 EDGENTRAG_LOG_LEVEL=INFO
 ~~~
 
-The .env.example file is safe to commit because it contains only non-secret
-defaults. A real .env file is local-only and belongs in .gitignore. When we
-introduce AWS credentials, the server will use an IAM role rather than storing
-keys in this file.
+The `config.yml` file is safe to commit because it contains only non-secret
+defaults. `.env.example` documents the secret/private override boundary. A
+real `.env` file is local-only and belongs in `.gitignore`. When we introduce
+AWS credentials, the server will use an IAM role rather than storing keys in
+this file.
 
 The settings type restricts environment and log-level values. A typo such as
 EDGENTRAG_ENVIRONMENT=prod is rejected during startup instead of quietly

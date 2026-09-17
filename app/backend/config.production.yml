@@ -1,0 +1,27 @@
+# Committed, non-sensitive production defaults.
+#
+# The deployment must still inject database/Redis URLs, S3 and queue resource
+# identifiers, Cognito identifiers, and all model-service URLs/tokens through
+# its environment or secret manager.
+environment: production
+log_level: INFO
+db_pool_size: 20
+db_max_overflow: 10
+redis_tls: true
+history_turns: 8
+aws_region: ap-south-1
+aws_endpoint_url: null
+queue_wait_seconds: 20
+queue_visibility_timeout_seconds: 900
+queue_batch_size: 10
+queue_max_receives: 5
+sse_ticket_seconds: 60
+upload_url_ttl_seconds: 900
+max_upload_bytes: 20971520
+max_text_extract_bytes: 20971520
+use_colab_for_embedding: true
+use_colab_for_llm: true
+generation_request_timeout_seconds: 300
+embedding_batch_size: 32
+embedding_request_timeout_seconds: 180
+search_max_chunks: 5000

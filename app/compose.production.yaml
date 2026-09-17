@@ -2,6 +2,7 @@
 # No local emulator or Redis container is defined here; AWS managed services
 # (RDS, ElastiCache, SQS and S3) are selected by the environment values.
 x-production-env: &production-env
+  EDGENTRAG_CONFIG_FILE: /opt/edgentrag/config.production.yml
   EDGENTRAG_ENVIRONMENT: production
   EDGENTRAG_AWS_ENDPOINT_URL: ""
 
