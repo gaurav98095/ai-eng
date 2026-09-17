@@ -13,8 +13,8 @@ from edgentrag.generation.model import (
     TextGenerator,
     TransformersGenerator,
 )
-from edgentrag.generation.schemas import GenerateRequest, GenerateResponse
 from edgentrag.generation.settings import GenerationSettings
+from edgentrag.llm.contracts import LLMRequest, LLMResponse
 
 logger = logging.getLogger(__name__)
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -40,13 +40,13 @@ def create_app(
             "device": getattr(backend, "device", configuration.device),
         }
 
-    @app.post("/generate", response_model=GenerateResponse)
+    @app.post("/generate", response_model=LLMResponse)
     async def generate(
-        body: GenerateRequest,
+        body: LLMRequest,
         credentials: Annotated[
             HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
         ],
-    ) -> GenerateResponse:
+    ) -> LLMResponse:
         expected = configuration.api_token.get_secret_value()
         if not expected:
             raise HTTPException(

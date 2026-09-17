@@ -5,12 +5,8 @@ import asyncio
 import httpx
 import pytest
 
-from edgentrag.generation.client import (
-    GenerationInputTooLarge,
-    GenerationServiceUnavailable,
-    HttpGenerationClient,
-)
-from edgentrag.generation.schemas import GenerateRequest
+from edgentrag.llm.client import HttpLLMClient, LLMInputTooLarge, LLMServiceUnavailable
+from edgentrag.llm.contracts import LLMRequest
 
 
 def test_generation_client_posts_contract_and_validates_response():
@@ -27,7 +23,7 @@ def test_generation_client_posts_contract_and_validates_response():
             },
         )
 
-    client = HttpGenerationClient(
+    client = HttpLLMClient(
         base_url="https://model.example.test/",
         api_token="secret",
         transport=httpx.MockTransport(handler),
@@ -35,7 +31,7 @@ def test_generation_client_posts_contract_and_validates_response():
     try:
         response = asyncio.run(
             client.generate(
-                GenerateRequest(prompt="Question and sources", max_new_tokens=32)
+                LLMRequest(prompt="Question and sources", max_new_tokens=32)
             )
         )
         assert response.model == "small-model"
@@ -54,19 +50,19 @@ def test_generation_client_posts_contract_and_validates_response():
     ],
 )
 def test_generation_client_sanitizes_http_and_payload_failures(response):
-    client = HttpGenerationClient(
+    client = HttpLLMClient(
         base_url="https://model.example.test",
         api_token="secret",
         transport=httpx.MockTransport(lambda _: response),
     )
     try:
         expected_error = (
-            GenerationInputTooLarge
+            LLMInputTooLarge
             if response.status_code == 413
-            else GenerationServiceUnavailable
+            else LLMServiceUnavailable
         )
         with pytest.raises(expected_error) as error:
-            asyncio.run(client.generate(GenerateRequest(prompt="question")))
+            asyncio.run(client.generate(LLMRequest(prompt="question")))
         assert "private tunnel" not in str(error.value)
     finally:
         asyncio.run(client.aclose())

@@ -11,13 +11,9 @@ from edgentrag.chat_queue import ChatQueueMessage, ChatQueueUnavailable, SQSChat
 from edgentrag.core.config import Settings, load_settings
 from edgentrag.core.database import Database
 from edgentrag.embedding.client import EmbeddingProvider, HttpEmbeddingClient
-from edgentrag.generation.client import (
-    GenerationInputTooLarge,
-    GenerationProvider,
-    HttpGenerationClient,
-)
+from edgentrag.llm.client import HttpLLMClient, LLMInputTooLarge, LLMProvider
+from edgentrag.llm.prompts.grounded_answer import PromptContextTooLarge
 from edgentrag.retrieval.answer import answer_session
-from edgentrag.retrieval.prompting import AnswerContextTooLarge
 from edgentrag.retrieval.service import SearchLimitExceeded, SearchNotReady
 from edgentrag.sessions.models import ChatSession, Message
 from edgentrag.sessions.state import lock_session
@@ -49,7 +45,7 @@ async def process_message(
     *,
     settings: Settings,
     embedding_provider: EmbeddingProvider | None,
-    generation_provider: GenerationProvider | None,
+    llm_provider: LLMProvider | None,
     events: RedisEvents | None = None,
 ) -> None:
     """Process one chat job and leave transient failures available for retry."""
@@ -82,14 +78,15 @@ async def process_message(
             top_k=5,
             max_new_tokens=256,
             embedding_provider=embedding_provider,
-            generation_provider=generation_provider,
+            llm_provider=llm_provider,
             max_chunks=settings.search_max_chunks,
+            max_prompt_chars=settings.generation_prompt_max_chars,
         )
     except (
         SearchNotReady,
         SearchLimitExceeded,
-        AnswerContextTooLarge,
-        GenerationInputTooLarge,
+        PromptContextTooLarge,
+        LLMInputTooLarge,
     ) as exc:
         async with database.sessions() as db:
             await db.execute(
@@ -155,8 +152,8 @@ async def run_worker() -> None:
         if settings.embedding_service_url is not None
         else None
     )
-    generation_provider = (
-        HttpGenerationClient(
+    llm_provider = (
+        HttpLLMClient(
             base_url=str(settings.generation_service_url),
             api_token=settings.generation_api_token.get_secret_value(),
             timeout_seconds=settings.generation_request_timeout_seconds,
@@ -184,7 +181,7 @@ async def run_worker() -> None:
                         message,
                         settings=settings,
                         embedding_provider=embedding_provider,
-                        generation_provider=generation_provider,
+                        llm_provider=llm_provider,
                         events=events,
                     )
                 except RetryableChatJob as exc:
@@ -209,8 +206,8 @@ async def run_worker() -> None:
         events.close()
         if embedding_provider is not None:
             await embedding_provider.aclose()
-        if generation_provider is not None:
-            await generation_provider.aclose()
+        if llm_provider is not None:
+            await llm_provider.aclose()
 
 
 if __name__ == "__main__":

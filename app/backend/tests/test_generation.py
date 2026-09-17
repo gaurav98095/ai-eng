@@ -10,8 +10,8 @@ from fastapi.testclient import TestClient
 
 from edgentrag.generation.app import create_app
 from edgentrag.generation.model import GenerationInputTooLarge, TransformersGenerator
-from edgentrag.generation.schemas import GenerateRequest, GenerateResponse
 from edgentrag.generation.settings import GenerationSettings
+from edgentrag.llm.contracts import LLMRequest, LLMResponse
 
 
 class FakeGenerator:
@@ -26,7 +26,7 @@ class FakeGenerator:
         if self.error:
             raise self.error
         self.is_loaded = True
-        return GenerateResponse(
+        return LLMResponse(
             model="test-model", content="A reply.", input_tokens=10, output_tokens=3
         )
 
@@ -159,7 +159,7 @@ def test_model_loads_once_formats_chat_and_strips_prompt_tokens(model_doubles):
     tokenizer, model, model_loader, tokenizer_loader = model_doubles
     generator = TransformersGenerator(GenerationSettings(device="cpu"))
     assert not generator.is_loaded
-    request = GenerateRequest(instructions="Be brief.", prompt="question")
+    request = LLMRequest(instructions="Be brief.", prompt="question")
     result = generator.generate(request)
     generator.generate(request)
     model_loader.assert_called_once()
@@ -192,5 +192,5 @@ def test_token_budget_rejects_before_inference_without_truncating(
     _, model, _, _ = model_doubles
     generator = TransformersGenerator(GenerationSettings(device="cpu", **limits))
     with pytest.raises(GenerationInputTooLarge):
-        generator.generate(GenerateRequest(prompt="question", max_new_tokens=16))
+        generator.generate(LLMRequest(prompt="question", max_new_tokens=16))
     model.generate.assert_not_called()

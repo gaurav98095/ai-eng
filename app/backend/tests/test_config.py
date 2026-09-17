@@ -91,6 +91,7 @@ def test_yaml_model_selection_is_shared_with_hosted_services(
         "\n".join(
             [
                 "embedding_model_name: sentence-transformers/all-mpnet-base-v2",
+                "embedding_batch_size: 12",
                 "generation_model_name: Qwen/Qwen2.5-7B-Instruct",
                 "generation_context_window: 8192",
                 "stt_model_name: Systran/faster-whisper-large-v3",
@@ -100,6 +101,7 @@ def test_yaml_model_selection_is_shared_with_hosted_services(
     monkeypatch.setenv("EDGENTRAG_CONFIG_FILE", str(config_file))
 
     assert EmbeddingSettings(_env_file=None).model_name.endswith("mpnet-base-v2")
+    assert EmbeddingSettings(_env_file=None).max_batch_size == 12
     assert GenerationSettings().model_name == "Qwen/Qwen2.5-7B-Instruct"
     assert GenerationSettings().context_window == 8192
     assert STTSettings().model_name.endswith("large-v3")

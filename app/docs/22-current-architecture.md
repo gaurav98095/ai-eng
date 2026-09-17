@@ -18,7 +18,7 @@ Browser (localhost:5173)
 
 API ──queues──► ingestion worker ──► embedding worker ──► PostgreSQL readiness
 API ──chat queue──► chat worker ──► retrieval + generation service
-API ──STT queue──► STT worker (currently validates jobs only)
+API ──STT queue──► STT worker ──► hosted STT service ──► transcript + chunks
 ```
 
 The API does not own model weights. Embedding and generation are HTTP model
@@ -109,9 +109,40 @@ Restart API/workers after changing settings; settings are cached at process
 startup.
 
 `config.yml` also selects the embedding, STT, and generation model names and
-their safe serving limits. Change `generation_model_name` to test a larger LLM
-only after checking that its tokenizer contract and GPU memory fit the selected
-model-service host; service URLs and tokens remain private environment values.
+their safe serving limits. The committed L4 profile selects
+`BAAI/bge-base-en-v1.5`, `Qwen/Qwen2.5-7B-Instruct`, and
+`Systran/faster-whisper-large-v3`; YAML comments list smaller and multilingual
+alternatives. Service URLs and tokens remain private environment values.
+`generation_prompt_max_chars` controls the bounded RAG evidence budget
+independently of the model host's tokenizer limit.
+
+Changing `embedding_model_name` requires re-ingestion: queries only search
+chunks with exactly the same stored model identity. PostgreSQL now accepts
+variable vector dimensions for that controlled swap. The old fixed-width HNSW
+index is removed because it cannot cover multiple dimensions; a later
+dimension-specific index migration is required before using a large corpus.
+
+## LLM application boundary
+
+The API and workers use this structure:
+
+```text
+llm/
+├── contracts.py                  # stable /generate request-response shape
+├── client.py                     # injectable hosted-provider transport
+└── prompts/grounded_answer.py    # bounded RAG prompt and citations
+
+generation/
+├── app.py                        # separately deployed /generate server
+├── model.py                      # Transformers model execution only
+└── settings.py                   # model-host configuration
+```
+
+`retrieval/answer.py` retrieves session evidence and composes these two
+application seams. Routes only translate domain exceptions to HTTP. Add a new
+prompt module or `LLMProvider` implementation for experiments; do not put
+prompt strings or hosted-model HTTP calls in routes, retrieval ranking, or
+queue code.
 
 ## Production status
 

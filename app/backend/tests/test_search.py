@@ -10,12 +10,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from edgentrag.api.app import create_app
-from edgentrag.api.dependencies import get_embedding_provider, get_generation_provider
+from edgentrag.api.dependencies import get_embedding_provider, get_llm_provider
 from edgentrag.core.config import Settings
 from edgentrag.embedding.client import EmbeddingBatch, EmbeddingServiceUnavailable
-from edgentrag.generation.schemas import GenerateRequest, GenerateResponse
 from edgentrag.ingestion.models import DocumentChunk
-from edgentrag.retrieval.prompting import MAX_PROMPT_CHARS
+from edgentrag.llm.contracts import LLMRequest, LLMResponse
+from edgentrag.llm.prompts.grounded_answer import MAX_PROMPT_CHARS
 from edgentrag.retrieval.schemas import SearchMatch
 from edgentrag.sessions.models import ChatSession, SessionFile
 
@@ -38,18 +38,18 @@ class FakeProvider:
         )
 
 
-class FakeGenerationProvider:
+class FakeLLMProvider:
     def __init__(self) -> None:
-        self.calls: list[GenerateRequest] = []
+        self.calls: list[LLMRequest] = []
         self.error = False
 
-    async def generate(self, request: GenerateRequest) -> GenerateResponse:
+    async def generate(self, request: LLMRequest) -> LLMResponse:
         self.calls.append(request)
         if self.error:
-            from edgentrag.generation.client import GenerationServiceUnavailable
+            from edgentrag.llm.client import LLMServiceUnavailable
 
-            raise GenerationServiceUnavailable("private generation failure")
-        return GenerateResponse(
+            raise LLMServiceUnavailable("private generation failure")
+        return LLMResponse(
             model="test-generator",
             content="The answer is 42 [S1].",
             input_tokens=20,
@@ -109,13 +109,13 @@ def search_setup(tmp_path):
         embedding_api_token="",
     )
     provider = FakeProvider()
-    generation_provider = FakeGenerationProvider()
+    llm_provider = FakeLLMProvider()
     app = create_app(settings=settings)
     app.dependency_overrides[get_embedding_provider] = lambda: provider
-    app.dependency_overrides[get_generation_provider] = lambda: generation_provider
+    app.dependency_overrides[get_llm_provider] = lambda: llm_provider
     try:
         with TestClient(app) as client:
-            yield client, provider, engine, settings, generation_provider
+            yield client, provider, engine, settings, llm_provider
     finally:
         engine.dispose()
 
@@ -274,7 +274,7 @@ def test_answer_handles_missing_services_and_remote_generation_404_safely(
     assert embedding.calls == [["question"]]
 
     generation.error = False
-    client.app.dependency_overrides[get_generation_provider] = lambda: None
+    client.app.dependency_overrides[get_llm_provider] = lambda: None
     response = client.post("/sessions/mine/answers", json={"query": "question"})
     assert response.status_code == 503
 
@@ -296,9 +296,9 @@ def test_answer_rejects_invalid_request_without_model_calls(search_setup, body):
 
 
 def test_answer_rejects_a_source_that_cannot_fit_without_truncation():
-    from edgentrag.retrieval.prompting import (
-        AnswerContextTooLarge,
-        build_answer_context,
+    from edgentrag.llm.prompts.grounded_answer import (
+        PromptContextTooLarge,
+        build_grounded_answer_prompt,
     )
 
     match = SearchMatch(
@@ -309,5 +309,5 @@ def test_answer_rejects_a_source_that_cannot_fit_without_truncation():
         content="x" * MAX_PROMPT_CHARS,
         score=1.0,
     )
-    with pytest.raises(AnswerContextTooLarge):
-        build_answer_context("question", [match])
+    with pytest.raises(PromptContextTooLarge):
+        build_grounded_answer_prompt("question", [match])

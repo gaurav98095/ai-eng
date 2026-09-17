@@ -17,9 +17,9 @@ people can inspect the evidence.
 ## 0. Why the boundaries matter
 
 This project is deliberately structured as a learning laboratory. Retrieval
-(`retrieval/service.py`), context packing (`retrieval/prompting.py`), answer
-orchestration (`retrieval/answer.py`), generation transport
-(`generation/client.py`), and model execution (`generation/model.py`) are
+(`retrieval/service.py`), answer orchestration (`retrieval/answer.py`), prompt
+policy (`llm/prompts/grounded_answer.py`), provider transport
+(`llm/client.py`), and hosted model execution (`generation/model.py`) are
 separate seams. Future experiments can replace one layer—for example with
 token-aware packing, a reranker, speculative decoding, a larger model, a
 custom CUDA kernel, or a GPU-specific serving client—without rewriting the

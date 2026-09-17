@@ -138,9 +138,9 @@ async def search_session(
                 )
 
     # Query embeddings are computed before opening the DB transaction so a slow
-    # remote provider cannot hold a connection.  PostgreSQL can then execute
-    # the ANN/vector operator in the database; SQLite retains the bounded
-    # in-process reference implementation for local development.
+    # remote provider cannot hold a connection. PostgreSQL executes the vector
+    # operator in the database; SQLite retains the bounded in-process reference
+    # implementation for local development.
     embed_query = getattr(provider, "embed_query", None)
     batch = await (embed_query(query) if embed_query else provider.embed([query]))
     if len(batch.embeddings) != 1:

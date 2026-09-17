@@ -25,17 +25,26 @@ use_colab_for_stt: true
 generation_request_timeout_seconds: 300
 stt_request_timeout_seconds: 600
 max_audio_upload_bytes: 536870912
-# Select model names and accelerator settings here before building/deploying a
-# model-service image. Keep service URLs and tokens in the secret environment.
-embedding_model_name: sentence-transformers/all-MiniLM-L6-v2
+# One-L4 production profile. Restart model hosts after changes; embeddings need
+# re-ingestion after a model change because vector dimensions/models differ.
+# Alternatives: BAAI/bge-m3 (multilingual/long input; batch 8-16),
+# sentence-transformers/all-MiniLM-L6-v2 (fast baseline), and
+# BAAI/bge-base-en-v1.5 (English quality/latency balance, selected below).
+embedding_model_name: BAAI/bge-base-en-v1.5
 embedding_device: auto
-generation_model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+# Qwen/Qwen2.5-7B-Instruct fits an L4 in the current FP16 Transformers host.
+# Qwen/Qwen2.5-3B-Instruct is the lower-latency fallback. 14B+ requires a
+# quantized/vLLM host; do not select it here until that host is deployed.
+generation_model_name: Qwen/Qwen2.5-7B-Instruct
 generation_device: auto
-generation_max_input_tokens: 1536
-generation_context_window: 2048
-stt_model_name: Systran/faster-whisper-small.en
+generation_max_input_tokens: 4096
+generation_context_window: 8192
+generation_prompt_max_chars: 12000
+# Use Systran/faster-whisper-distil-large-v3 for faster English STT or
+# Systran/faster-whisper-small.en for the smallest baseline.
+stt_model_name: Systran/faster-whisper-large-v3
 stt_device: auto
-stt_compute_type: auto
+stt_compute_type: float16
 stt_max_upload_bytes: 536870912
 embedding_batch_size: 32
 embedding_request_timeout_seconds: 180

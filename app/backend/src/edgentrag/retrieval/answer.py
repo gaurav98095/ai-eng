@@ -1,23 +1,14 @@
-"""Retrieve bounded evidence and pass it to the standalone generator."""
+"""Retrieve session evidence, then delegate prompt and inference to ``llm``."""
 
 from edgentrag.core.database import Database
 from edgentrag.embedding.client import EmbeddingProvider
-from edgentrag.generation.client import (
-    GenerationProvider,
-    GenerationServiceUnavailable,
+from edgentrag.llm.client import LLMProvider, LLMServiceUnavailable
+from edgentrag.llm.contracts import LLMRequest
+from edgentrag.llm.prompts.grounded_answer import (
+    GROUNDED_ANSWER_INSTRUCTIONS,
+    build_grounded_answer_prompt,
 )
-from edgentrag.generation.schemas import GenerateRequest
 from edgentrag.retrieval.answer_schemas import AnswerResponse
-from edgentrag.retrieval.prompting import (
-    ANSWER_INSTRUCTIONS,
-    MAX_PROMPT_CHARS,
-    build_answer_context,
-)
-
-# The standalone model service currently accepts 1,536 input tokens. A
-# conservative character budget leaves room for the chat template and system
-# instructions (character/token ratios vary by tokenizer).
-MODEL_PROMPT_CHARS = 5_000
 from edgentrag.retrieval.service import search_session
 
 
@@ -29,12 +20,13 @@ async def answer_session(
     top_k: int,
     max_new_tokens: int,
     embedding_provider: EmbeddingProvider | None,
-    generation_provider: GenerationProvider | None,
+    llm_provider: LLMProvider | None,
     max_chunks: int,
+    max_prompt_chars: int,
 ) -> AnswerResponse:
     """Answer from only the retrieved chunks for the requested session."""
-    if generation_provider is None:
-        raise GenerationServiceUnavailable("generation service is not configured")
+    if llm_provider is None:
+        raise LLMServiceUnavailable("LLM service is not configured")
     search = await search_session(
         database,
         session_id=session_id,
@@ -43,14 +35,14 @@ async def answer_session(
         provider=embedding_provider,
         max_chunks=max_chunks,
     )
-    context = build_answer_context(
+    context = build_grounded_answer_prompt(
         query,
         search.matches,
-        max_prompt_chars=min(MAX_PROMPT_CHARS, MODEL_PROMPT_CHARS),
+        max_prompt_chars=max_prompt_chars,
     )
-    generated = await generation_provider.generate(
-        GenerateRequest(
-            instructions=ANSWER_INSTRUCTIONS,
+    generated = await llm_provider.generate(
+        LLMRequest(
+            instructions=GROUNDED_ANSWER_INSTRUCTIONS,
             prompt=context.prompt,
             max_new_tokens=max_new_tokens,
         )

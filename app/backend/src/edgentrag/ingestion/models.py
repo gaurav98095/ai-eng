@@ -50,7 +50,10 @@ class DocumentChunk(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(
         (
-            JSON().with_variant(Vector(384), "postgresql")
+            # A dimensionless pgvector column permits controlled embedding-model
+            # upgrades. Queries remain model-scoped; re-ingest after changing
+            # the configured model so old and new vectors are never mixed.
+            JSON().with_variant(Vector(), "postgresql")
             if Vector is not None
             else JSON
         ),

@@ -10,8 +10,8 @@ from edgentrag.chat_queue import ChatQueue
 from edgentrag.core.config import Settings
 from edgentrag.core.database import Database
 from edgentrag.embedding.client import EmbeddingProvider
-from edgentrag.generation.client import GenerationProvider
 from edgentrag.ingestion.queue import IngestionQueue
+from edgentrag.llm.client import LLMProvider
 from edgentrag.shared.events import RedisEvents
 from edgentrag.storage.s3 import ObjectStorage
 from edgentrag.stt.queue import STTQueue
@@ -52,9 +52,9 @@ def get_embedding_provider(request: Request) -> EmbeddingProvider | None:
     return cast(EmbeddingProvider | None, request.app.state.embedding_provider)
 
 
-def get_generation_provider(request: Request) -> GenerationProvider | None:
-    """Return the optional shared generation client owned by this API process."""
-    return cast(GenerationProvider | None, request.app.state.generation_provider)
+def get_llm_provider(request: Request) -> LLMProvider | None:
+    """Return the optional shared LLM client owned by this API process."""
+    return cast(LLMProvider | None, request.app.state.llm_provider)
 
 
 def get_events(request: Request) -> RedisEvents:

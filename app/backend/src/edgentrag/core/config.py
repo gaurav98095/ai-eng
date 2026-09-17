@@ -22,6 +22,7 @@ MODEL_SERVICE_CONFIG_KEYS = {
     "generation_device",
     "generation_max_input_tokens",
     "generation_context_window",
+    "generation_prompt_max_chars",
     "stt_model_name",
     "stt_device",
     "stt_compute_type",
@@ -175,6 +176,7 @@ class Settings(BaseSettings):
     generation_service_url: AnyHttpUrl | None = None
     generation_api_token: SecretStr = SecretStr("")
     generation_request_timeout_seconds: float = Field(default=300, gt=0, le=600)
+    generation_prompt_max_chars: int = Field(default=5000, ge=1, le=16000)
     embedding_service_url: AnyHttpUrl | None = None
     embedding_api_token: SecretStr = SecretStr("")
     embedding_batch_size: int = Field(default=32, gt=0, le=64)

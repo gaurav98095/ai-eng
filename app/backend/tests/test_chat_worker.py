@@ -54,7 +54,7 @@ def test_worker_persists_generated_answer(tmp_path, monkeypatch) -> None:
             receipt_handle="r",
         ),
         settings=Settings(_env_file=None, environment="test", database_url=url),
-        embedding_provider=None, generation_provider=Providers(),
+        embedding_provider=None, llm_provider=Providers(),
     ))
     async def read():
         async with database.sessions() as db:
@@ -90,7 +90,7 @@ def test_worker_resets_pending_on_transient_failure(tmp_path, monkeypatch) -> No
                 receipt_handle="r",
             ),
             settings=Settings(_env_file=None, environment="test", database_url=url),
-            embedding_provider=None, generation_provider=Providers(),
+            embedding_provider=None, llm_provider=Providers(),
         ))
     except RetryableChatJob:
         pass

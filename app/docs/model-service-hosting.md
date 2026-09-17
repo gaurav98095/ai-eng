@@ -94,6 +94,19 @@ Model names and serving limits now live in `backend/config.yml`: for example,
 change `generation_model_name`, `generation_context_window`, or
 `stt_model_name` there before starting the corresponding hosted service.
 
+The committed profile targets one NVIDIA L4 (24 GB):
+
+- `BAAI/bge-base-en-v1.5` for English embeddings; use `BAAI/bge-m3` when
+  multilingual or longer input matters, and lower `embedding_batch_size`.
+- `Qwen/Qwen2.5-7B-Instruct` for grounded generation in the existing FP16
+  Transformers host. Do not select 14B+ models until a quantized/vLLM adapter
+  is deployed.
+- `Systran/faster-whisper-large-v3` with `stt_compute_type: float16` for
+  multilingual transcription; use the distil or small variants for lower cost.
+
+Changing the embedding model requires re-ingestion. Stored vectors retain the
+model identity and are never mixed with a query from a different model.
+
 Switching hosting does not migrate vectors or change model names. Keep the
 same embedding model when reusing stored vectors; otherwise re-ingest the
 documents so query and document embeddings are compatible.

@@ -37,6 +37,7 @@ class EmbeddingSettings(BaseSettings):
                 {
                     "embedding_model_name": "model_name",
                     "embedding_device": "device",
+                    "embedding_batch_size": "max_batch_size",
                 },
             ),
             file_secret_settings,

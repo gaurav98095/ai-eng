@@ -50,7 +50,7 @@ def test_health_does_not_load_model_and_embedding_returns_normalized_vectors() -
 
     assert response.status_code == 200
     assert response.json() == {
-        "model": "sentence-transformers/all-MiniLM-L6-v2",
+        "model": "BAAI/bge-base-en-v1.5",
         "dimensions": 2,
         "embeddings": [[1.0, 0.0], [0.0, 1.0]],
     }

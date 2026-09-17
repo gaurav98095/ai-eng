@@ -3,8 +3,8 @@
 from threading import Lock
 from typing import Protocol
 
-from edgentrag.generation.schemas import GenerateRequest, GenerateResponse
 from edgentrag.generation.settings import GenerationSettings
+from edgentrag.llm.contracts import LLMRequest, LLMResponse
 
 
 class GenerationInputTooLarge(Exception):
@@ -15,7 +15,7 @@ class TextGenerator(Protocol):
     @property
     def is_loaded(self) -> bool: ...
 
-    def generate(self, request: GenerateRequest) -> GenerateResponse: ...
+    def generate(self, request: LLMRequest) -> LLMResponse: ...
 
 
 class TransformersGenerator:
@@ -32,7 +32,7 @@ class TransformersGenerator:
     def is_loaded(self) -> bool:
         return self._model is not None
 
-    def generate(self, request: GenerateRequest) -> GenerateResponse:
+    def generate(self, request: LLMRequest) -> LLMResponse:
         with self._lock:
             # Importing/starting the HTTP app never downloads weights or imports torch.
             import torch
@@ -92,7 +92,7 @@ class TransformersGenerator:
                     pad_token_id=self._tokenizer.eos_token_id,
                 )
             answer_ids = outputs[0][input_tokens:]
-            return GenerateResponse(
+            return LLMResponse(
                 model=self.settings.model_name,
                 content=self._tokenizer.decode(answer_ids, skip_special_tokens=True),
                 input_tokens=input_tokens,

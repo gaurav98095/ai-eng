@@ -19,8 +19,8 @@ from edgentrag.chat_queue import SQSChatQueue
 from edgentrag.core.config import Settings, load_settings
 from edgentrag.core.database import Database
 from edgentrag.embedding.client import HttpEmbeddingClient
-from edgentrag.generation.client import HttpGenerationClient
 from edgentrag.ingestion.queue import SQSIngestionQueue
+from edgentrag.llm.client import HttpLLMClient
 from edgentrag.shared.events import RedisEvents
 from edgentrag.shared.queues import SQSQueue
 from edgentrag.storage.s3 import S3ObjectStorage
@@ -69,7 +69,7 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
             )
         )
         app.state.embedding_provider = None
-        app.state.generation_provider = None
+        app.state.llm_provider = None
         try:
             if app_settings.embedding_service_url is not None:
                 app.state.embedding_provider = HttpEmbeddingClient(
@@ -78,15 +78,15 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
                     timeout_seconds=app_settings.embedding_request_timeout_seconds,
                 )
             if app_settings.generation_service_url is not None:
-                app.state.generation_provider = HttpGenerationClient(
+                app.state.llm_provider = HttpLLMClient(
                     base_url=str(app_settings.generation_service_url),
                     api_token=app_settings.generation_api_token.get_secret_value(),
                     timeout_seconds=app_settings.generation_request_timeout_seconds,
                 )
             yield
         finally:
-            if app.state.generation_provider is not None:
-                await app.state.generation_provider.aclose()
+            if app.state.llm_provider is not None:
+                await app.state.llm_provider.aclose()
             if app.state.embedding_provider is not None:
                 await app.state.embedding_provider.aclose()
             await app.state.database.dispose()
