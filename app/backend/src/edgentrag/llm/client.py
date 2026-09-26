@@ -1,5 +1,6 @@
 """Injectable transport adapters for hosted LLM inference."""
 
+import json
 from typing import Protocol
 
 import httpx
@@ -42,15 +43,25 @@ class HttpLLMClient:
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         """Return a validated response without exposing remote error details."""
+        include_content = capture_content()
         attributes = {
             "openinference.span.kind": "LLM",
-            "llm.input_messages": request.instructions,
-            "llm.request.max_tokens": request.max_new_tokens,
+            "llm.system": "transformers",
+            "llm.invocation_parameters": json.dumps(
+                {"max_new_tokens": request.max_new_tokens}, separators=(",", ":")
+            ),
+            "llm.input_chars": len(request.instructions) + len(request.prompt),
         }
-        if not capture_content():
-            attributes.pop("llm.input_messages")
-            attributes["llm.input_chars"] = len(request.instructions) + len(
-                request.prompt
+        if include_content:
+            attributes.update(
+                {
+                    "input.value": request.model_dump_json(),
+                    "input.mime_type": "application/json",
+                    "llm.input_messages.0.message.role": "system",
+                    "llm.input_messages.0.message.content": request.instructions,
+                    "llm.input_messages.1.message.role": "user",
+                    "llm.input_messages.1.message.content": request.prompt,
+                }
             )
         with span("llm.generate", **attributes) as current:
             try:
@@ -70,8 +81,17 @@ class HttpLLMClient:
                         "llm.output_chars": len(result.content),
                         "llm.token_count.prompt": result.input_tokens,
                         "llm.token_count.completion": result.output_tokens,
-                        "llm.output_value": (
-                            result.content if capture_content() else None
+                        "output.value": (
+                            result.model_dump_json() if include_content else None
+                        ),
+                        "output.mime_type": (
+                            "application/json" if include_content else None
+                        ),
+                        "llm.output_messages.0.message.role": (
+                            "assistant" if include_content else None
+                        ),
+                        "llm.output_messages.0.message.content": (
+                            result.content if include_content else None
                         ),
                     },
                 )

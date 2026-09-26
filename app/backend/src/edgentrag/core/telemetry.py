@@ -16,8 +16,10 @@ from contextlib import contextmanager
 from typing import Any
 
 logger = logging.getLogger(__name__)
-_configured_services: set[str] = set()
 _logging_configured = False
+_phoenix_configured = False
+_logger_provider: Any = None
+_tracer_provider: Any = None
 
 
 def _truthy(value: str | None) -> bool:
@@ -31,58 +33,55 @@ def capture_content() -> bool:
 
 def configure(service_name: str) -> None:
     """Configure optional Phoenix spans and OTLP logs once per process."""
-    global _logging_configured
-    if service_name in _configured_services:
-        return
-    _configured_services.add(service_name)
+    global _logger_provider, _logging_configured
+    global _phoenix_configured, _tracer_provider
 
     resource_attrs = {"service.name": os.getenv("OTEL_SERVICE_NAME", service_name)}
-    try:
-        from opentelemetry._logs import set_logger_provider
-        from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
-        from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-        from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-        from opentelemetry.sdk.resources import Resource
-    except ImportError:
-        if os.getenv("PHOENIX_COLLECTOR_ENDPOINT") or os.getenv(
-            "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"
-        ):
-            logger.warning("Telemetry SDK is not installed; telemetry is disabled")
-        return
+    logs_endpoint = os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
+    generic_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    if logs_endpoint is None and generic_endpoint:
+        logs_endpoint = generic_endpoint.rstrip("/") + "/v1/logs"
+    if logs_endpoint and not _logging_configured:
+        try:
+            from opentelemetry._logs import set_logger_provider
+            from opentelemetry.exporter.otlp.proto.http._log_exporter import (
+                OTLPLogExporter,
+            )
+            from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+            from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+            from opentelemetry.sdk.resources import Resource
 
-    resource = Resource.create(resource_attrs)
-    if not _logging_configured:
-        logs_endpoint = os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
-        generic_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-        if logs_endpoint is None and generic_endpoint:
-            logs_endpoint = generic_endpoint.rstrip("/") + "/v1/logs"
-        if logs_endpoint:
-            try:
-                provider = LoggerProvider(resource=resource)
-                provider.add_log_record_processor(
-                    BatchLogRecordProcessor(OTLPLogExporter(endpoint=logs_endpoint))
-                )
-                set_logger_provider(provider)
-                logging.getLogger().addHandler(
-                    LoggingHandler(level=logging.NOTSET, logger_provider=provider)
-                )
-                _logging_configured = True
-            except Exception:  # pragma: no cover
-                logger.exception("Could not configure OTLP log export")
+            resource = Resource.create(resource_attrs)
+            provider = LoggerProvider(resource=resource)
+            provider.add_log_record_processor(
+                BatchLogRecordProcessor(OTLPLogExporter(endpoint=logs_endpoint))
+            )
+            set_logger_provider(provider)
+            logging.getLogger().addHandler(
+                LoggingHandler(level=logging.NOTSET, logger_provider=provider)
+            )
+        except Exception:  # pragma: no cover - depends on exporter configuration
+            logger.exception("Could not configure OTLP log export")
+        else:
+            _logger_provider = provider
+            _logging_configured = True
 
     phoenix_endpoint = os.getenv("PHOENIX_COLLECTOR_ENDPOINT")
-    if phoenix_endpoint:
+    if phoenix_endpoint and not _phoenix_configured:
         try:
             from phoenix.otel import register
 
-            register(
+            provider = register(
                 project_name=os.getenv("PHOENIX_PROJECT_NAME", "edgentrag"),
                 endpoint=phoenix_endpoint,
                 auto_instrument=False,
                 batch=True,
             )
-        except Exception:  # pragma: no cover
+        except Exception:  # pragma: no cover - depends on exporter configuration
             logger.exception("Could not configure Phoenix tracing")
+        else:
+            _tracer_provider = provider
+            _phoenix_configured = True
 
 
 @contextmanager
@@ -90,15 +89,16 @@ def span(name: str, **attributes: Any) -> Iterator[Any]:
     """Create a best-effort span, safe when OpenTelemetry is not installed."""
     try:
         from opentelemetry import trace
-
-        tracer = trace.get_tracer("edgentrag")
-        with tracer.start_as_current_span(name) as current:
-            for key, value in attributes.items():
-                if value is not None:
-                    current.set_attribute(key, value)
-            yield current
     except ImportError:
         yield None
+        return
+
+    tracer = trace.get_tracer("edgentrag")
+    with tracer.start_as_current_span(name) as current:
+        for key, value in attributes.items():
+            if value is not None:
+                current.set_attribute(key, value)
+        yield current
 
 
 def set_span_attributes(current: Any, **attributes: Any) -> None:

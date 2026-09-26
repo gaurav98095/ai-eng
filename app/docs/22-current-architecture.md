@@ -165,8 +165,8 @@ compare latency without leaking user data.
 ### Grafana and Phoenix telemetry
 
 Every API, model service, and worker calls the optional telemetry bootstrap at
-startup. Install the observability extra (`pip install -e '.[observability]'`)
-to enable Phoenix's OpenInference exporter. Set `PHOENIX_COLLECTOR_ENDPOINT`,
+startup. The required SDKs are installed with the backend, but exporters remain
+inactive until an endpoint is configured. Set `PHOENIX_COLLECTOR_ENDPOINT`,
 `PHOENIX_PROJECT_NAME`, and `PHOENIX_API_KEY` when required by the deployment.
 The RAG chain, query embedding, and hosted generation call emit spans with
 bounded counts and durations; prompt and answer content is excluded unless

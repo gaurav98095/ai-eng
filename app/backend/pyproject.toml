@@ -26,6 +26,7 @@ dependencies = [
   "opentelemetry-api>=1.29,<2",
   "opentelemetry-sdk>=1.29,<2",
   "opentelemetry-exporter-otlp-proto-http>=1.29,<2",
+  "arize-phoenix-otel>=0.9,<1",
 ]
 
 [project.optional-dependencies]
@@ -48,10 +49,6 @@ dev = [
   "pytest>=8,<9",
   "ruff>=0.8,<1",
 ]
-observability = [
-  "arize-phoenix-otel>=0.9,<1",
-]
-
 [tool.hatch.build.targets.wheel]
 packages = ["src/edgentrag"]
 

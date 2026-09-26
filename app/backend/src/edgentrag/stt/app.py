@@ -12,11 +12,14 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from edgentrag.core.telemetry import configure
+
 from .settings import load_settings, resolve_compute_type, resolve_device
 
 logger = logging.getLogger(__name__)
 bearer = HTTPBearer(auto_error=False)
 settings = load_settings()
+configure("edgentrag-stt")
 _model = None
 
 

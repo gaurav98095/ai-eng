@@ -28,29 +28,52 @@ async def answer_session(
     """Answer from only the retrieved chunks for the requested session."""
     if llm_provider is None:
         raise LLMServiceUnavailable("LLM service is not configured")
-    search = await search_session(
-        database,
-        session_id=session_id,
-        query=query,
-        top_k=top_k,
-        provider=embedding_provider,
-        max_chunks=max_chunks,
-    )
-    context = build_grounded_answer_prompt(
-        query,
-        search.matches,
-        max_prompt_chars=max_prompt_chars,
-    )
+    include_content = capture_content()
     with span(
         "rag.answer",
         **{
             "openinference.span.kind": "CHAIN",
             "session.id": session_id,
-            "retrieval.match_count": len(search.matches),
-            "llm.input_chars": len(context.prompt),
-            "input.value": query if capture_content() else None,
+            "input.value": query if include_content else None,
+            "input.mime_type": "text/plain" if include_content else None,
+            "input.chars": len(query),
         },
     ) as current:
+        with span(
+            "rag.retrieve",
+            **{
+                "openinference.span.kind": "RETRIEVER",
+                "input.value": query if include_content else None,
+                "input.mime_type": "text/plain" if include_content else None,
+            },
+        ) as retrieval_span:
+            search = await search_session(
+                database,
+                session_id=session_id,
+                query=query,
+                top_k=top_k,
+                provider=embedding_provider,
+                max_chunks=max_chunks,
+            )
+            set_span_attributes(
+                retrieval_span,
+                **{
+                    "retrieval.match_count": len(search.matches),
+                    "retrieval.searched_chunks": search.searched_chunks,
+                },
+            )
+        context = build_grounded_answer_prompt(
+            query,
+            search.matches,
+            max_prompt_chars=max_prompt_chars,
+        )
+        set_span_attributes(
+            current,
+            **{
+                "retrieval.match_count": len(search.matches),
+                "llm.input_chars": len(context.prompt),
+            },
+        )
         generated = await llm_provider.generate(
             LLMRequest(
                 instructions=GROUNDED_ANSWER_INSTRUCTIONS,
@@ -61,7 +84,8 @@ async def answer_session(
         set_span_attributes(
             current,
             **{
-                "output.value": generated.content if capture_content() else None,
+                "output.value": generated.content if include_content else None,
+                "output.mime_type": "text/plain" if include_content else None,
                 "llm.output_chars": len(generated.content),
             },
         )

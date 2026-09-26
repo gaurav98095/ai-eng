@@ -1,12 +1,31 @@
 """Tests for the backend's authenticated generation-service client."""
 
 import asyncio
+from contextlib import contextmanager
 
 import httpx
 import pytest
 
 from edgentrag.llm.client import HttpLLMClient, LLMInputTooLarge, LLMServiceUnavailable
 from edgentrag.llm.contracts import LLMRequest
+
+
+def _telemetry_recorder(monkeypatch, *, include_content: bool):
+    captured: dict[str, object] = {}
+
+    @contextmanager
+    def record_span(name, **attributes):
+        captured["name"] = name
+        captured.update(attributes)
+        yield object()
+
+    def record_attributes(_, **attributes):
+        captured.update(attributes)
+
+    monkeypatch.setattr("edgentrag.llm.client.capture_content", lambda: include_content)
+    monkeypatch.setattr("edgentrag.llm.client.span", record_span)
+    monkeypatch.setattr("edgentrag.llm.client.set_span_attributes", record_attributes)
+    return captured
 
 
 def test_generation_client_posts_contract_and_validates_response():
@@ -38,6 +57,53 @@ def test_generation_client_posts_contract_and_validates_response():
         assert response.content == "Grounded response."
     finally:
         asyncio.run(client.aclose())
+
+
+@pytest.mark.parametrize("include_content", [False, True])
+def test_generation_client_emits_redacted_openinference_attributes(
+    monkeypatch, include_content
+):
+    captured = _telemetry_recorder(monkeypatch, include_content=include_content)
+    client = HttpLLMClient(
+        base_url="https://model.example.test",
+        api_token="secret",
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(
+                200,
+                json={
+                    "model": "small-model",
+                    "content": "private answer",
+                    "input_tokens": 12,
+                    "output_tokens": 4,
+                },
+            )
+        ),
+    )
+    request = LLMRequest(
+        instructions="private instructions",
+        prompt="private prompt",
+        max_new_tokens=32,
+    )
+    try:
+        asyncio.run(client.generate(request))
+    finally:
+        asyncio.run(client.aclose())
+
+    assert captured["name"] == "llm.generate"
+    assert captured["openinference.span.kind"] == "LLM"
+    assert captured["llm.system"] == "transformers"
+    assert captured["llm.token_count.prompt"] == 12
+    assert captured["llm.token_count.completion"] == 4
+    serialized = repr(captured)
+    if include_content:
+        assert captured["llm.input_messages.1.message.content"] == "private prompt"
+        assert captured["llm.output_messages.0.message.content"] == "private answer"
+        assert captured["input.mime_type"] == "application/json"
+        assert captured["output.mime_type"] == "application/json"
+    else:
+        assert "private instructions" not in serialized
+        assert "private prompt" not in serialized
+        assert "private answer" not in serialized
 
 
 @pytest.mark.parametrize(
