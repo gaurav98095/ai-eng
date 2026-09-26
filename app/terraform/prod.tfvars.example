@@ -1,7 +1,9 @@
 environment = "production"
 project_name = "edgentrag"
 aws_region = "ap-south-1"
-# Supply existing VPC/private subnet IDs and a secret through CI or -var.
+# Supply existing VPC/private subnet IDs. Pass the database password through
+# TF_VAR_database_password or CI secret injection; never store it here.
 vpc_id = "vpc-REPLACE"
 private_subnet_ids = ["subnet-REPLACE-A", "subnet-REPLACE-B"]
-container_image = "REPLACE_ECR_IMAGE"
+ecs_security_group_ids = ["sg-ECS-TASKS-REPLACE"]
+frontend_origins = ["https://app.example.com"]

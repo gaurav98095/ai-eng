@@ -12,6 +12,8 @@ class ChatQueue(Protocol):
         self, *, session_id: str, message_id: str, question: str
     ) -> None: ...
 
+    def ping(self) -> bool: ...
+
 
 class SQSChatQueue:
     """Publish persisted chat-turn references through the shared transport."""
@@ -30,6 +32,9 @@ class SQSChatQueue:
                 "question": question,
             }
         )
+
+    def ping(self) -> bool:
+        return self._queue.ping()
 
     def close(self) -> None:
         self._queue.close()

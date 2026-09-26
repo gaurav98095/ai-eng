@@ -62,6 +62,11 @@ class Database:
         async with self._engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
 
+    async def check_schema(self) -> None:
+        """Verify the release migration has created the session tables."""
+        async with self._engine.connect() as connection:
+            await connection.execute(text("SELECT 1 FROM sessions LIMIT 1"))
+
     async def dispose(self) -> None:
         """Close pooled connections during application shutdown."""
         await self._engine.dispose()

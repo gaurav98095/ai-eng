@@ -10,12 +10,10 @@ db_max_overflow: 10
 redis_tls: true
 # Set EDGENTRAG_CORS_ALLOWED_ORIGINS to a JSON array for the deployed frontend.
 cors_allowed_origins: []
-history_turns: 8
 aws_region: ap-south-1
 aws_endpoint_url: null
 queue_wait_seconds: 20
 queue_visibility_timeout_seconds: 900
-queue_batch_size: 10
 queue_max_receives: 5
 sse_ticket_seconds: 60
 upload_url_ttl_seconds: 900

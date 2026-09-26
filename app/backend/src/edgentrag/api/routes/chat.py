@@ -49,8 +49,7 @@ async def post_message(
         raise HTTPException(
             status_code=503, detail="chat queue is temporarily unavailable"
         ) from exc
-    events.append_history(session_id, "user", body.content)
-    events.publish(session_id, "chat.accepted", {"message_id": message_id})
+    await events.publish(session_id, "chat.accepted", {"message_id": message_id})
     return ChatAccepted(message_id=message_id)
 
 
@@ -68,7 +67,7 @@ async def list_messages(
             await database_session.execute(
                 select(Message)
                 .where(Message.session_id == session_id)
-                .order_by(Message.created_at)
+                .order_by(Message.created_at, Message.id)
             )
         )
         .scalars()

@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from edgentrag.ingestion.queue import QueueUnavailable, SQSIngestionQueue
-from edgentrag.shared.queues import QueueError, SQSQueue
+from edgentrag.shared.queues import SQSQueue
 
 
 def make_transport() -> SQSQueue:
@@ -75,11 +75,23 @@ def test_transport_long_polls_raw_messages_and_acknowledges_them() -> None:
     queue.close()
 
 
-def test_transport_reports_partial_batch_failure() -> None:
+def test_transport_extends_visibility_for_slow_work() -> None:
     client = Mock()
-    client.send_message_batch.return_value = {"Failed": [{"Id": "0"}]}
     with patch("edgentrag.shared.queues.boto3.client", return_value=client):
         queue = make_transport()
-        with pytest.raises(QueueError, match="rejected"):
-            queue.send_many([{"schema_version": 1}])
+        message = type(
+            "Message",
+            (),
+            {
+                "queue_url": queue.queue_url,
+                "receipt_handle": "receipt-123",
+            },
+        )()
+        queue.extend(message, seconds=120)
+
+    client.change_message_visibility.assert_called_once_with(
+        QueueUrl=queue.queue_url,
+        ReceiptHandle="receipt-123",
+        VisibilityTimeout=120,
+    )
     queue.close()

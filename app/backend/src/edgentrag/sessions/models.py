@@ -77,6 +77,7 @@ class SessionFile(Base):
     object_key: Mapped[str] = mapped_column(
         "raw_key", String(512), unique=True, nullable=False
     )
+    object_etag: Mapped[str | None] = mapped_column(String(255), nullable=True)
     text_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False, default="document")
@@ -132,4 +133,10 @@ class Message(Base):
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )

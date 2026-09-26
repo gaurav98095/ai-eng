@@ -26,7 +26,7 @@ the queue-based STT worker and require the hosted authenticated
 ```text
 Browser ──► FastAPI ──► PostgreSQL/pgvector (durable session, file, and chat state)
    │           │
-   │           ├──► Redis (event tickets, notifications, cached history)
+   │           ├──► Redis (event tickets and notifications)
    │           └──► SQS-compatible queues ──► background workers
    │                                             │
    └── presigned upload ──► S3-compatible storage  └──► model-service APIs
@@ -129,7 +129,9 @@ also the restart path after editing backend settings.
 | External Floci | http://localhost:4566 |
 
 `/health` checks the API process only. `/ready` checks database and Redis
-connectivity; neither verifies successful indexing or model inference.
+connectivity in local/test mode, and additionally checks the migrated schema,
+object storage, and required queues in production; it does not verify model
+inference.
 
 ### 4. Try the workspace
 
@@ -248,15 +250,16 @@ The existing tooling is incomplete:
 
 - `make infra-prod-plan` plans infrastructure; `make infra-prod` applies Terraform
   and pushes backend images, but does not complete an ECS rollout or frontend deployment.
-- `scripts/setup-prod.sh` applies infrastructure before all deployment prerequisites are
-  checked. Review it before running: it can create billable resources.
+- `scripts/setup-prod.sh` validates the deployment prerequisites before applying
+  infrastructure; it can still create billable resources.
 - `compose.production.yaml` is not currently a safe production override. Merging
   it with the local base retains local infrastructure values, test AWS credentials,
   and the backend dotenv file. Do not deploy that merged stack unchanged.
 - ECS templates contain placeholders and need a complete, consistent runtime
   configuration. Current shared validation requires ingestion and chat queue URLs
   for every production process; embedding configuration also requires its queue.
-- The API's CORS allowlist currently contains only local frontend origins.
+- Production CORS origins and model endpoints must be injected through the
+  production environment; local origins are rejected by validation.
 - Run migrations once as a release step before rolling out API and worker services.
 
 Local Compose and local Terraform are alternative owners of PostgreSQL/Redis.
@@ -265,15 +268,18 @@ not a unified deployment pipeline.
 
 ## Current limitations
 
-- Worker claims lack crash-recovery leases; chat can remain stuck in `answering`.
-- Synchronous search and answers routes still need session ownership checks
-  before multi-user production exposure.
+- Chat answers carry a timestamped processing lease and stale `answering`
+  claims can be recovered after a worker crash.
 - Queue payload validation belongs to each worker; the shared SQS transport owns
-  polling, acknowledgements, and partial-batch error reporting.
-- Redis operations in async routes and SSE reconnect/cleanup behavior need work.
+  single-message polling, acknowledgements, visibility heartbeats, and
+  dead-letter handling.
+- Redis event operations use async clients and atomic one-time SSE tickets;
+  reconnects still require the browser to mint a fresh ticket.
 - A failed upload batch can leave unconfirmed files blocking session readiness;
   use distinct filenames and small test batches while experimenting.
 - Browser-side presigned URL rewriting is unsafe with strict host-signature validation.
+- The local frontend keeps pasted Cognito tokens in memory only; a hosted
+  production auth flow should replace the development token field entirely.
 - Prompt packing uses characters rather than the model's complete token budget.
 - STT requires a configured hosted provider, but its worker persists transcripts
   and searchable chunks when that provider is available.

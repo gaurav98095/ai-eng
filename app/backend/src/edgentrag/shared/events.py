@@ -1,4 +1,4 @@
-"""Best-effort Redis cache/pubsub; PostgreSQL remains the source of truth."""
+"""Best-effort Redis pub/sub; PostgreSQL remains the source of truth."""
 
 from __future__ import annotations
 
@@ -6,16 +6,14 @@ import json
 import logging
 from typing import Any
 
-from redis import Redis
 from redis.asyncio import Redis as AsyncRedis
 
 logger = logging.getLogger(__name__)
 
 
 class RedisEvents:
-    def __init__(self, url: str, *, history_turns: int = 8, tls: bool = False) -> None:
+    def __init__(self, url: str, *, tls: bool = False) -> None:
         self.url = url
-        self.history_turns = history_turns
         self.tls = tls
         # Do not pass ``ssl=None``: redis-py treats the presence of the
         # keyword as an instruction to construct an SSL connection, and the
@@ -23,24 +21,21 @@ class RedisEvents:
         options = {"decode_responses": True}
         if tls:
             options["ssl"] = True
-        self.client = Redis.from_url(url, **options)
+        self.client = AsyncRedis.from_url(url, **options)
 
-    def append_history(self, session_id: str, role: str, content: str) -> None:
-        key = f"chat:{session_id}"
-        try:
-            self.client.rpush(key, json.dumps({"role": role, "content": content}))
-            self.client.ltrim(key, -(self.history_turns * 2), -1)
-            self.client.expire(key, 86400)
-        except Exception as exc:
-            logger.warning(
-                "redis_event_failed operation=append_history session_id=%s error=%s",
-                session_id,
-                type(exc).__name__,
-            )
+    async def mint_ticket(self, ticket: str, value: str, expires_in: int) -> None:
+        """Store one short-lived EventSource ticket."""
+        await self.client.setex(f"sse-ticket:{ticket}", expires_in, value)
 
-    def publish(self, session_id: str, event: str, payload: dict[str, Any]) -> None:
+    async def consume_ticket(self, ticket: str) -> str | None:
+        """Atomically consume a ticket so concurrent replays cannot succeed."""
+        return await self.client.getdel(f"sse-ticket:{ticket}")
+
+    async def publish(
+        self, session_id: str, event: str, payload: dict[str, Any]
+    ) -> None:
         try:
-            self.client.publish(
+            await self.client.publish(
                 f"events:{session_id}", json.dumps({"event": event, **payload})
             )
         except Exception as exc:
@@ -51,13 +46,13 @@ class RedisEvents:
                 type(exc).__name__,
             )
 
-    def close(self) -> None:
-        self.client.close()
+    async def close(self) -> None:
+        await self.client.aclose()
 
-    def ping(self) -> bool:
+    async def ping(self) -> bool:
         """Check the cache dependency without exposing Redis to callers."""
         try:
-            return bool(self.client.ping())
+            return bool(await self.client.ping())
         except Exception:
             return False
 

@@ -44,9 +44,11 @@ export function UploadPanel({ baseUrl, sessionId }: Props) {
         content_type: contentTypeFor(file),
         size_bytes: file.size,
       })));
-      for (const target of targets) {
-        const file = localFiles.find((item) => item.name === target.filename);
-        if (!file) continue;
+      if (targets.length !== localFiles.length) {
+        throw new Error("Backend returned an incomplete upload target set.");
+      }
+      for (const [index, target] of targets.entries()) {
+        const file = localFiles[index];
         setUploadingName(file.name);
         await putUpload(target, file);
         await completeUpload(baseUrl, sessionId, target.file_id);

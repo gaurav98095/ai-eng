@@ -11,7 +11,7 @@ class FakeEvents:
     def __init__(self, available: bool) -> None:
         self.available = available
 
-    def ping(self) -> bool:
+    async def ping(self) -> bool:
         return self.available
 
 

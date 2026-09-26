@@ -28,7 +28,7 @@ from edgentrag.ingestion.extraction import (
 from edgentrag.ingestion.models import DocumentChunk
 from edgentrag.sessions.models import ChatSession, SessionFile
 from edgentrag.sessions.state import lock_session
-from edgentrag.shared.queues import Message, QueueError, SQSQueue
+from edgentrag.shared.queues import Message, QueueError, SQSQueue, maintain_visibility
 from edgentrag.storage.s3 import (
     ObjectStorage,
     ObjectTooLarge,
@@ -82,6 +82,20 @@ async def _update_session_status(
         session.status = "failed"
     else:
         session.status = "ready"
+
+
+async def _mark_file_failed(
+    database: Database, job: IngestionJob, reason: str
+) -> None:
+    async with database.sessions() as db:
+        await lock_session(db, job.session_id)
+        file_record = await db.get(SessionFile, job.file_id)
+        if file_record is None or file_record.status in {"ready", "failed"}:
+            return
+        file_record.status = "failed"
+        file_record.error = reason[:1000]
+        await _update_session_status(db, session_id=job.session_id)
+        await db.commit()
 
 
 async def _embed_chunks(
@@ -162,6 +176,16 @@ async def process_message(
                 raise DocumentExtractionError(
                     "stored object size changed after upload confirmation"
                 )
+            get_metadata = getattr(storage, "get_object_metadata", None)
+            if file_record.object_etag and get_metadata is not None:
+                metadata = await asyncio.to_thread(
+                    get_metadata,
+                    key=file_record.object_key,
+                )
+                if metadata.etag and metadata.etag != file_record.object_etag:
+                    raise DocumentExtractionError(
+                        "stored object changed after upload confirmation"
+                    )
             extracted_text = extract_text(
                 filename=file_record.filename,
                 content_type=file_record.content_type,
@@ -322,7 +346,7 @@ async def run_worker() -> None:
             try:
                 messages = await asyncio.to_thread(
                     queue.receive,
-                    max_messages=settings.queue_batch_size,
+                    max_messages=1,
                 )
             except QueueError:
                 logger.exception("Could not poll the ingestion queue; retrying soon")
@@ -331,31 +355,59 @@ async def run_worker() -> None:
 
             for message in messages:
                 try:
-                    await process_message(
-                        database,
-                        storage,
-                        message,
-                        settings=settings,
-                        embedding_provider=embedding_provider,
-                        embedding_queue=embedding_queue,
-                    )
+                    async with maintain_visibility(queue, message):
+                        await process_message(
+                            database,
+                            storage,
+                            message,
+                            settings=settings,
+                            embedding_provider=embedding_provider,
+                            embedding_queue=embedding_queue,
+                        )
                 except RetryableIngestionJob as exc:
                     logger.info("Leaving ingestion job for retry: %s", exc)
-                    continue
+                    if message.receive_count < settings.queue_max_receives:
+                        continue
+                    try:
+                        job = IngestionJob.model_validate_json(message.body)
+                    except ValidationError:
+                        continue
+                    await _mark_file_failed(
+                        database,
+                        job,
+                        f"job exceeded {settings.queue_max_receives} attempts: {exc}",
+                    )
                 except InvalidIngestionJob:
                     logger.exception("Discarding invalid ingestion message")
                 except StorageUnavailable:
                     logger.exception("Storage is unavailable; leaving job for retry")
-                    continue
+                    if message.receive_count < settings.queue_max_receives:
+                        continue
+                    try:
+                        job = IngestionJob.model_validate_json(message.body)
+                    except ValidationError:
+                        continue
+                    await _mark_file_failed(
+                        database,
+                        job,
+                        f"job exceeded {settings.queue_max_receives} attempts",
+                    )
                 except Exception:
                     logger.exception("Ingestion failed; leaving job for retry")
-                    continue
+                    if message.receive_count < settings.queue_max_receives:
+                        continue
+                    try:
+                        job = IngestionJob.model_validate_json(message.body)
+                    except ValidationError:
+                        continue
+                    await _mark_file_failed(
+                        database,
+                        job,
+                        f"job exceeded {settings.queue_max_receives} attempts",
+                    )
 
                 try:
-                    await asyncio.to_thread(
-                        queue.delete,
-                        message,
-                    )
+                    await asyncio.to_thread(queue.delete, message)
                 except QueueError:
                     logger.exception("Could not acknowledge job; it may be redelivered")
     finally:

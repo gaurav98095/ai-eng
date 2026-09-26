@@ -1,5 +1,6 @@
 """Create the queues required by the local Compose stack, if absent."""
 
+import json
 import os
 
 import boto3
@@ -39,8 +40,26 @@ def main() -> None:
             raise
         print(f"S3 bucket ready: {BUCKET_NAME}")
     for name in QUEUE_NAMES:
+        dead_letter = client.create_queue(QueueName=f"{name}-dlq")
+        dead_letter_url = dead_letter["QueueUrl"]
+        attributes = client.get_queue_attributes(
+            QueueUrl=dead_letter_url,
+            AttributeNames=["QueueArn"],
+        )["Attributes"]
         result = client.create_queue(QueueName=name)
-        print(f"SQS queue ready: {result['QueueUrl']}")
+        queue_url = result["QueueUrl"]
+        client.set_queue_attributes(
+            QueueUrl=queue_url,
+            Attributes={
+                "RedrivePolicy": json.dumps(
+                    {
+                        "deadLetterTargetArn": attributes["QueueArn"],
+                        "maxReceiveCount": os.getenv("QUEUE_MAX_RECEIVES", "5"),
+                    }
+                )
+            },
+        )
+        print(f"SQS queue ready: {queue_url} (DLQ: {dead_letter_url})")
 
 
 if __name__ == "__main__":

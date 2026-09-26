@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from datetime import UTC, datetime, timedelta
 from time import perf_counter
 from typing import Literal
 
@@ -20,7 +21,7 @@ from edgentrag.sessions.models import ChatSession, Message
 from edgentrag.sessions.state import lock_session
 from edgentrag.shared.events import RedisEvents
 from edgentrag.shared.queues import Message as QueueMessage
-from edgentrag.shared.queues import QueueError, SQSQueue
+from edgentrag.shared.queues import QueueError, SQSQueue, maintain_visibility
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class ChatJob(BaseModel):
     schema_version: Literal[1]
     session_id: str = Field(min_length=1, max_length=36)
     message_id: str = Field(min_length=1, max_length=36)
-    question: str = Field(min_length=1, max_length=2000)
+    question: str = Field(min_length=1, max_length=4000)
 
 
 class InvalidChatJob(Exception):
@@ -40,6 +41,22 @@ class InvalidChatJob(Exception):
 
 class RetryableChatJob(Exception):
     """Raised when a remote dependency should be retried by SQS."""
+
+
+async def _mark_answer_failed(
+    database: Database, message_id: str, reason: str
+) -> None:
+    async with database.sessions() as db:
+        await db.execute(
+            update(Message)
+            .where(Message.id == message_id, Message.status != "done")
+            .values(
+                status="failed",
+                content=reason,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await db.commit()
 
 
 async def process_message(
@@ -70,9 +87,18 @@ async def process_message(
             return
         if session.status != "ready":
             raise RetryableChatJob("session is not ready for answering")
-        if answer.status != "pending":
+        updated_at = answer.updated_at
+        if updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)
+        lease_expired = updated_at < datetime.now(UTC) - timedelta(
+            seconds=settings.queue_visibility_timeout_seconds * 2
+        )
+        if answer.status == "answering" and not lease_expired:
             raise RetryableChatJob("answer is already being processed")
+        if answer.status not in {"pending", "answering"}:
+            raise RetryableChatJob("answer is in an unsupported processing state")
         answer.status = "answering"
+        answer.updated_at = datetime.now(UTC)
         await db.commit()
     try:
         result = await answer_session(
@@ -96,7 +122,11 @@ async def process_message(
             await db.execute(
                 update(Message)
                 .where(Message.id == job.message_id, Message.status == "answering")
-                .values(status="failed", content=str(exc))
+                .values(
+                    status="failed",
+                    content=str(exc),
+                    updated_at=datetime.now(UTC),
+                )
             )
             await db.commit()
         return
@@ -105,7 +135,7 @@ async def process_message(
             await db.execute(
                 update(Message)
                 .where(Message.id == job.message_id, Message.status == "answering")
-                .values(status="pending")
+                .values(status="pending", updated_at=datetime.now(UTC))
             )
             await db.commit()
         raise RetryableChatJob("answer dependencies are unavailable") from exc
@@ -118,12 +148,12 @@ async def process_message(
                 status="done",
                 content=result.answer,
                 sources=[source.model_dump(mode="json") for source in result.sources],
+                updated_at=datetime.now(UTC),
             )
         )
         await db.commit()
     if events is not None:
-        events.append_history(job.session_id, "assistant", result.answer)
-        events.publish(
+        await events.publish(
             job.session_id,
             "chat.completed",
             {"message_id": job.message_id, "status": "done"},
@@ -156,9 +186,7 @@ async def run_worker() -> None:
         visibility_timeout=settings.queue_visibility_timeout_seconds,
         wait_seconds=settings.queue_wait_seconds,
     )
-    events = RedisEvents(
-        settings.redis_url, history_turns=settings.history_turns, tls=settings.redis_tls
-    )
+    events = RedisEvents(settings.redis_url, tls=settings.redis_tls)
     embedding_provider = (
         HttpEmbeddingClient(
             base_url=str(settings.embedding_service_url),
@@ -182,7 +210,7 @@ async def run_worker() -> None:
             try:
                 messages = await asyncio.to_thread(
                     queue.receive,
-                    max_messages=settings.queue_batch_size,
+                    max_messages=1,
                 )
             except QueueError:
                 logger.exception("Could not poll the chat queue; retrying soon")
@@ -190,22 +218,39 @@ async def run_worker() -> None:
                 continue
             for message in messages:
                 try:
-                    await process_message(
-                        database,
-                        message,
-                        settings=settings,
-                        embedding_provider=embedding_provider,
-                        llm_provider=llm_provider,
-                        events=events,
-                    )
+                    async with maintain_visibility(queue, message):
+                        await process_message(
+                            database,
+                            message,
+                            settings=settings,
+                            embedding_provider=embedding_provider,
+                            llm_provider=llm_provider,
+                            events=events,
+                        )
                 except RetryableChatJob as exc:
                     logger.info("Leaving chat job for retry: %s", exc)
-                    continue
+                    if message.receive_count < settings.queue_max_receives:
+                        continue
+                    await _mark_answer_failed(
+                        database,
+                        ChatJob.model_validate_json(message.body).message_id,
+                        f"job exceeded {settings.queue_max_receives} attempts",
+                    )
                 except InvalidChatJob:
                     logger.exception("Discarding invalid chat message")
                 except Exception:
                     logger.exception("Chat answer failed; leaving job for retry")
-                    continue
+                    if message.receive_count < settings.queue_max_receives:
+                        continue
+                    try:
+                        job = ChatJob.model_validate_json(message.body)
+                    except ValidationError:
+                        continue
+                    await _mark_answer_failed(
+                        database,
+                        job.message_id,
+                        f"job exceeded {settings.queue_max_receives} attempts",
+                    )
                 try:
                     await asyncio.to_thread(queue.delete, message)
                 except QueueError:
@@ -215,7 +260,7 @@ async def run_worker() -> None:
     finally:
         await database.dispose()
         queue.close()
-        events.close()
+        await events.close()
         if embedding_provider is not None:
             await embedding_provider.aclose()
         if llm_provider is not None:

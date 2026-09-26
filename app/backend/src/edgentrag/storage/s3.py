@@ -27,6 +27,7 @@ class ObjectMetadata:
 
     size_bytes: int
     content_type: str
+    etag: str | None = None
 
 
 class ObjectStorage(Protocol):
@@ -43,6 +44,8 @@ class ObjectStorage(Protocol):
     def get_object_metadata(self, *, key: str) -> ObjectMetadata: ...
 
     def read_object(self, *, key: str, max_bytes: int) -> bytes: ...
+
+    def ping(self) -> bool: ...
 
 
 class S3ObjectStorage:
@@ -109,6 +112,7 @@ class S3ObjectStorage:
             return ObjectMetadata(
                 size_bytes=int(response["ContentLength"]),
                 content_type=str(response["ContentType"]),
+                etag=str(response.get("ETag", "")).strip('"') or None,
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise StorageUnavailable(
@@ -132,6 +136,16 @@ class S3ObjectStorage:
         if len(content) > max_bytes:
             raise ObjectTooLarge("uploaded object exceeds the text extraction limit")
         return content
+
+    def ping(self) -> bool:
+        """Check that the configured bucket is reachable."""
+        if not self.bucket:
+            return False
+        try:
+            self._client.head_bucket(Bucket=self.bucket)
+            return True
+        except (BotoCoreError, ClientError):
+            return False
 
     def close(self) -> None:
         """Release the client connection pool if this adapter was used."""

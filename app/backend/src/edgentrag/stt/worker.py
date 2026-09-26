@@ -19,7 +19,7 @@ from edgentrag.ingestion.models import DocumentChunk
 from edgentrag.ingestion.worker import _embed_chunks, _update_session_status
 from edgentrag.sessions.models import SessionFile
 from edgentrag.sessions.state import lock_session
-from edgentrag.shared.queues import Message, QueueError, SQSQueue
+from edgentrag.shared.queues import Message, QueueError, SQSQueue, maintain_visibility
 from edgentrag.storage.s3 import ObjectStorage, ObjectTooLarge, S3ObjectStorage
 from edgentrag.stt.client import (
     HttpSTTClient,
@@ -105,6 +105,13 @@ async def process_message(
             raise STTTranscriptionRejected(
                 "stored media size changed after confirmation"
             )
+        get_metadata = getattr(storage, "get_object_metadata", None)
+        if file_record.object_etag and get_metadata is not None:
+            metadata = await asyncio.to_thread(get_metadata, key=object_key)
+            if metadata.etag and metadata.etag != file_record.object_etag:
+                raise STTTranscriptionRejected(
+                    "stored media changed after confirmation"
+                )
         transcript = await provider.transcribe(
             session_id=job.session_id,
             file_id=job.file_id,
@@ -239,7 +246,7 @@ async def run_worker() -> None:
         while True:
             try:
                 messages = await asyncio.to_thread(
-                    queue.receive, max_messages=settings.queue_batch_size
+                    queue.receive, max_messages=1
                 )
             except QueueError:
                 logger.exception("STT queue unavailable")
@@ -247,24 +254,40 @@ async def run_worker() -> None:
                 continue
             for message in messages:
                 try:
-                    await process_message(
-                        database,
-                        storage,
-                        provider,
-                        message,
-                        settings=settings,
-                        embedding_provider=embedding_provider,
-                        embedding_queue=embedding_queue,
-                    )
+                    async with maintain_visibility(queue, message):
+                        await process_message(
+                            database,
+                            storage,
+                            provider,
+                            message,
+                            settings=settings,
+                            embedding_provider=embedding_provider,
+                            embedding_queue=embedding_queue,
+                        )
                 except RetryableSTTJob as exc:
                     logger.info("Leaving STT job for retry: %s", exc)
-                    continue
+                    if message.receive_count < settings.queue_max_receives:
+                        continue
+                    try:
+                        job = STTJob.model_validate_json(message.body)
+                    except ValidationError:
+                        continue
+                    await _mark_failed(database, job, job.file_id)
                 except InvalidSTTJob:
                     logger.exception("Discarding invalid STT message")
                 except Exception:
                     logger.exception("STT processing failed; leaving job for retry")
-                    continue
-                queue.delete(message)
+                    if message.receive_count < settings.queue_max_receives:
+                        continue
+                    try:
+                        job = STTJob.model_validate_json(message.body)
+                    except ValidationError:
+                        continue
+                    await _mark_failed(database, job, job.file_id)
+                try:
+                    await asyncio.to_thread(queue.delete, message)
+                except QueueError:
+                    logger.exception("Could not acknowledge STT job")
     finally:
         await provider.aclose()
         if embedding_provider is not None:

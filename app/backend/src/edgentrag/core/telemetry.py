@@ -36,7 +36,7 @@ def configure(service_name: str) -> None:
     global _logger_provider, _logging_configured
     global _phoenix_configured, _tracer_provider
 
-    resource_attrs = {"service.name": os.getenv("OTEL_SERVICE_NAME", service_name)}
+    resource_attrs = {"service.name": os.getenv("OTEL_SERVICE_NAME") or service_name}
     logs_endpoint = os.getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
     generic_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
     if logs_endpoint is None and generic_endpoint:

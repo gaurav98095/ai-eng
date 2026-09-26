@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Any
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+
+logger = logging.getLogger(__name__)
 
 
 class QueueError(RuntimeError):
@@ -31,7 +37,7 @@ class Message:
 
 
 class SQSQueue:
-    """Small, dependency-light SQS adapter with long polling and batching."""
+    """Small, dependency-light SQS adapter with long polling."""
 
     def __init__(
         self,
@@ -71,29 +77,7 @@ class SQSQueue:
         except (BotoCoreError, ClientError) as exc:
             raise QueueError("could not send queue message") from exc
 
-    def send_many(self, bodies: list[dict[str, Any]]) -> None:
-        if len(bodies) > 10:
-            raise ValueError("SQS batches cannot contain more than 10 messages")
-        if not bodies:
-            return
-        self._require_queue_url()
-        try:
-            response = self.client.send_message_batch(
-                QueueUrl=self.queue_url,
-                Entries=[
-                    {
-                        "Id": str(index),
-                        "MessageBody": json.dumps(body, separators=(",", ":")),
-                    }
-                    for index, body in enumerate(bodies)
-                ],
-            )
-            if response.get("Failed"):
-                raise QueueError("SQS rejected one or more queue messages")
-        except (BotoCoreError, ClientError) as exc:
-            raise QueueError("could not send queue batch") from exc
-
-    def receive(self, *, max_messages: int = 10) -> list[Message]:
+    def receive(self, *, max_messages: int = 1) -> list[Message]:
         if not 1 <= max_messages <= 10:
             raise ValueError("max_messages must be between 1 and 10")
         self._require_queue_url()
@@ -131,6 +115,18 @@ class SQSQueue:
         except (BotoCoreError, ClientError) as exc:
             raise QueueError("could not acknowledge queue message") from exc
 
+    def ping(self) -> bool:
+        """Check queue access without consuming a message."""
+        try:
+            self._require_queue_url()
+            self.client.get_queue_attributes(
+                QueueUrl=self.queue_url,
+                AttributeNames=["ApproximateNumberOfMessages"],
+            )
+            return True
+        except (BotoCoreError, ClientError, QueueError):
+            return False
+
     def extend(self, message: Message, seconds: int | None = None) -> None:
         try:
             self.client.change_message_visibility(
@@ -144,3 +140,36 @@ class SQSQueue:
     def close(self) -> None:
         if "client" in self.__dict__:
             self.client.close()
+
+
+@asynccontextmanager
+async def maintain_visibility(
+    queue: SQSQueue,
+    message: Message,
+) -> AsyncIterator[None]:
+    """Keep one in-flight message hidden while a slow worker handles it.
+
+    Workers intentionally receive one message at a time. Extending that message
+    prevents model calls longer than the initial visibility timeout from being
+    executed concurrently by another worker.
+    """
+
+    interval = max(1, queue.visibility_timeout // 3)
+
+    async def heartbeat() -> None:
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await asyncio.to_thread(queue.extend, message)
+            except QueueError:
+                logger.exception(
+                    "Could not extend queue visibility; duplicate work is possible"
+                )
+
+    task = asyncio.create_task(heartbeat())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task

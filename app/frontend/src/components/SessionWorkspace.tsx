@@ -6,9 +6,23 @@ import { UploadPanel } from "./UploadPanel";
 
 type Props = { baseUrl: string };
 
+function loadRecentSessions(): string[] {
+  try {
+    const value: unknown = JSON.parse(
+      window.localStorage.getItem("edgentrag.sessions") || "[]",
+    );
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export function SessionWorkspace({ baseUrl }: Props) {
   const [sessionId, setSessionId] = useState("");
-  const [recentSessions, setRecentSessions] = useState<string[]>(() => JSON.parse(window.localStorage.getItem("edgentrag.sessions") || "[]"));
+  const [recentSessions, setRecentSessions] =
+    useState<string[]>(loadRecentSessions);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
@@ -17,7 +31,17 @@ export function SessionWorkspace({ baseUrl }: Props) {
     try {
       const session = await createSession(baseUrl);
       setSessionId(session.session_id);
-      setRecentSessions((current) => { const next = [session.session_id, ...current.filter((id) => id !== session.session_id)].slice(0, 8); window.localStorage.setItem("edgentrag.sessions", JSON.stringify(next)); return next; });
+      setRecentSessions((current) => {
+        const next = [
+          session.session_id,
+          ...current.filter((id) => id !== session.session_id),
+        ].slice(0, 8);
+        window.localStorage.setItem(
+          "edgentrag.sessions",
+          JSON.stringify(next),
+        );
+        return next;
+      });
       setMessages([]);
       setError("");
     } catch (reason) {
@@ -25,21 +49,39 @@ export function SessionWorkspace({ baseUrl }: Props) {
     }
   };
 
-  const selectSession = (id: string) => { setSessionId(id); setError(""); };
+  const selectSession = (id: string) => {
+    setSessionId(id);
+    setError("");
+  };
 
   useEffect(() => {
     if (!sessionId) return;
+    let cancelled = false;
     const refresh = async () => {
-      try { setMessages(await listChat(baseUrl, sessionId)); } catch { /* keep the last view */ }
+      try {
+        const next = await listChat(baseUrl, sessionId);
+        if (!cancelled) setMessages(next);
+      } catch {
+        // Keep the last successfully loaded view.
+      }
     };
     void refresh();
     let source: EventSource | undefined;
-    void createEventsTicket(baseUrl, sessionId).then(({ ticket }) => {
-      source = new EventSource(`${baseUrl.replace(/\/$/, "")}/sessions/${sessionId}/events?ticket=${encodeURIComponent(ticket)}`);
-      source.onmessage = () => void refresh();
-    }).catch(() => undefined);
+    void createEventsTicket(baseUrl, sessionId)
+      .then(({ ticket }) => {
+        if (cancelled) return;
+        source = new EventSource(
+          `${baseUrl.replace(/\/$/, "")}/sessions/${sessionId}/events?ticket=${encodeURIComponent(ticket)}`,
+        );
+        source.onmessage = () => void refresh();
+      })
+      .catch(() => undefined);
     const timer = window.setInterval(() => void refresh(), 5000);
-    return () => { window.clearInterval(timer); source?.close(); };
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      source?.close();
+    };
   }, [baseUrl, sessionId]);
 
   const submit = async (event: FormEvent) => {

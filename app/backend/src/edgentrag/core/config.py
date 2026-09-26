@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import yaml
 from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
@@ -140,7 +141,6 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     redis_tls: bool = False
     cors_allowed_origins: list[str] = []
-    history_turns: int = Field(default=8, ge=1, le=50)
     aws_region: str = "ap-south-1"
     aws_endpoint_url: str | None = None
     s3_bucket: str = ""
@@ -150,7 +150,6 @@ class Settings(BaseSettings):
     embedding_queue_url: str = ""
     queue_wait_seconds: int = Field(default=20, ge=0, le=20)
     queue_visibility_timeout_seconds: int = Field(default=900, gt=0, le=43200)
-    queue_batch_size: int = Field(default=10, ge=1, le=10)
     queue_max_receives: int = Field(default=5, ge=1, le=100)
     cognito_region: str = ""
     cognito_user_pool_id: str = ""
@@ -185,8 +184,6 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_model_configuration(self) -> "Settings":
         """Resolve selected hosts and require their URL/token pairs."""
-        if self.environment == "production" and self.database_url.startswith("sqlite"):
-            raise ValueError("production requires a PostgreSQL database_url")
         if self.environment == "production" and self.aws_endpoint_url:
             raise ValueError(
                 "aws_endpoint_url is only valid for local Floci development"
@@ -199,17 +196,6 @@ class Settings(BaseSettings):
                 for origin in self.cors_allowed_origins
             ):
                 raise ValueError("production CORS origins cannot be local addresses")
-            required_queues = {
-                "ingestion_queue_url": self.ingestion_queue_url,
-                "chat_queue_url": self.chat_queue_url,
-            }
-            missing_queues = [
-                name for name, value in required_queues.items() if not value
-            ]
-            if missing_queues:
-                raise ValueError(
-                    "production requires queue URLs: " + ", ".join(missing_queues)
-                )
         if self.environment == "local" and not self.aws_endpoint_url:
             # Compose overrides the endpoint to the internal `floci` service;
             # host-run commands may continue using localhost:4566.
@@ -268,7 +254,66 @@ class Settings(BaseSettings):
             raise ValueError(
                 "stt_service_url and stt_api_token must be configured together"
             )
+        if self.environment == "production":
+            self._validate_production(has_stt_url=has_stt_url)
         return self
+
+    def _validate_production(self, *, has_stt_url: bool) -> None:
+        """Reject a production process with missing or local-only dependencies."""
+        database = urlparse(self.database_url)
+        if database.scheme not in {"postgres", "postgresql", "postgresql+asyncpg"}:
+            raise ValueError("production requires a PostgreSQL database_url")
+        if database.hostname in {None, "localhost", "127.0.0.1"}:
+            raise ValueError("production database_url cannot use a local host")
+
+        redis = urlparse(self.redis_url)
+        if redis.scheme != "rediss":
+            raise ValueError("production redis_url must use TLS (rediss://)")
+        if redis.hostname in {None, "localhost", "127.0.0.1"}:
+            raise ValueError("production redis_url cannot use a local host")
+
+        required_values = {
+            "s3_bucket": self.s3_bucket,
+            "ingestion_queue_url": self.ingestion_queue_url,
+            "chat_queue_url": self.chat_queue_url,
+            "embedding_queue_url": self.embedding_queue_url,
+            "cognito_region": self.cognito_region,
+            "cognito_user_pool_id": self.cognito_user_pool_id,
+            "cognito_client_id": self.cognito_client_id,
+        }
+        if has_stt_url:
+            required_values["stt_queue_url"] = self.stt_queue_url
+        missing = [name for name, value in required_values.items() if not value]
+        if missing:
+            raise ValueError(
+                "production requires configuration: " + ", ".join(missing)
+            )
+
+        required_providers = {
+            "embedding_service_url": self.embedding_service_url,
+            "generation_service_url": self.generation_service_url,
+        }
+        missing_providers = [
+            name for name, value in required_providers.items() if value is None
+        ]
+        if missing_providers:
+            raise ValueError(
+                "production requires model providers: "
+                + ", ".join(missing_providers)
+            )
+        insecure_providers = [
+            name
+            for name, value in {
+                **required_providers,
+                "stt_service_url": self.stt_service_url,
+            }.items()
+            if value is not None and value.scheme != "https"
+        ]
+        if insecure_providers:
+            raise ValueError(
+                "production model URLs must use HTTPS: "
+                + ", ".join(insecure_providers)
+            )
 
 
 @lru_cache

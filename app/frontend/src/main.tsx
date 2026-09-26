@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { useState } from "react";
-import { checkHealth } from "./api";
+import { checkHealth, setAuthToken } from "./api";
 import { SessionWorkspace } from "./components/SessionWorkspace";
 import "./styles.css";
 
@@ -10,13 +10,13 @@ function App() {
   const [connected, setConnected] = useState(false);
   const [page, setPage] = useState<"overview" | "workspace" | "settings">("overview");
   const [error, setError] = useState("");
-  const [token, setToken] = useState(() => window.localStorage.getItem("edgentrag.id_token") ?? "");
+  const [token, setToken] = useState("");
   const saveToken = () => {
-    if (token.trim()) window.localStorage.setItem("edgentrag.id_token", token.trim());
-    else window.localStorage.removeItem("edgentrag.id_token");
+    setAuthToken(token.trim());
   };
   const connect = async () => {
     setError("");
+    setAuthToken(token.trim());
     try {
       const result = await checkHealth(baseUrl);
       setConnected(result.status === "ok");

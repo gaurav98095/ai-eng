@@ -6,17 +6,17 @@ TF_DIR="$ROOT_DIR/terraform"
 TFVARS="${TFVARS_FILE:-$TF_DIR/prod.tfvars}"
 
 command -v terraform >/dev/null || { echo "terraform is required" >&2; exit 1; }
+command -v aws >/dev/null || { echo "aws CLI is required for deployment" >&2; exit 1; }
+command -v docker >/dev/null || { echo "docker is required for image deployment" >&2; exit 1; }
 [[ -f "$TFVARS" ]] || { echo "Create $TFVARS from prod.tfvars.example" >&2; exit 1; }
+[[ -n "${TF_VAR_database_password:-}" ]] || { echo "Set TF_VAR_database_password from a secret manager" >&2; exit 1; }
+[[ -n "${ECS_CLUSTER:-}" ]] || { echo "Set ECS_CLUSTER" >&2; exit 1; }
+[[ -n "${ECS_SUBNETS:-}" ]] || { echo "Set ECS_SUBNETS (comma-separated)" >&2; exit 1; }
+[[ -n "${ECS_SECURITY_GROUP:-}" ]] || { echo "Set ECS_SECURITY_GROUP" >&2; exit 1; }
 
 terraform -chdir="$TF_DIR" init
 terraform -chdir="$TF_DIR" plan -var-file="$TFVARS" -out=prod.tfplan
 terraform -chdir="$TF_DIR" apply prod.tfplan
-
-command -v aws >/dev/null || { echo "aws CLI is required for deployment" >&2; exit 1; }
-command -v docker >/dev/null || { echo "docker is required for image deployment" >&2; exit 1; }
-[[ -n "${ECS_CLUSTER:-}" ]] || { echo "Set ECS_CLUSTER" >&2; exit 1; }
-[[ -n "${ECS_SUBNETS:-}" ]] || { echo "Set ECS_SUBNETS (comma-separated)" >&2; exit 1; }
-[[ -n "${ECS_SECURITY_GROUP:-}" ]] || { echo "Set ECS_SECURITY_GROUP" >&2; exit 1; }
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 REGISTRY="$ACCOUNT_ID.dkr.ecr.${AWS_REGION:-ap-south-1}.amazonaws.com"

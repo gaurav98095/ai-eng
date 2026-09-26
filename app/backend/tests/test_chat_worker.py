@@ -8,7 +8,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from edgentrag.chat.worker import RetryableChatJob
+from edgentrag.chat.worker import ChatJob, RetryableChatJob
 from edgentrag.core.config import Settings
 from edgentrag.core.database import Database
 from edgentrag.retrieval.answer_schemas import AnswerResponse
@@ -24,6 +24,17 @@ def migrate(url: str) -> None:
 
 class Providers:
     pass
+
+
+def test_worker_accepts_the_same_question_limit_as_the_api() -> None:
+    job = ChatJob(
+        schema_version=1,
+        session_id="s",
+        message_id="m",
+        question="x" * 4000,
+    )
+
+    assert len(job.question) == 4000
 
 
 def test_worker_persists_generated_answer(tmp_path, monkeypatch) -> None:

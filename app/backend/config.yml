@@ -11,12 +11,10 @@ redis_tls: false
 cors_allowed_origins:
   - http://localhost:5173
   - http://127.0.0.1:5173
-history_turns: 8
 aws_region: ap-south-1
 aws_endpoint_url: http://localhost:4566
 queue_wait_seconds: 20
 queue_visibility_timeout_seconds: 900
-queue_batch_size: 10
 queue_max_receives: 5
 sse_ticket_seconds: 60
 upload_url_ttl_seconds: 900

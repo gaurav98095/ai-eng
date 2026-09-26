@@ -1,5 +1,11 @@
 import type { ChatMessage, Session, SessionDetail } from "./types";
 
+let authToken = "";
+
+export function setAuthToken(token: string): void {
+  authToken = token;
+}
+
 export type HealthResponse = { status: string };
 
 export async function checkHealth(baseUrl: string): Promise<HealthResponse> {
@@ -18,10 +24,13 @@ export async function checkHealth(baseUrl: string): Promise<HealthResponse> {
 }
 
 async function request<T>(baseUrl: string, path: string, init?: RequestInit): Promise<T> {
-  const token = window.localStorage.getItem("edgentrag.id_token");
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...init?.headers,
+    },
   });
   if (!response.ok) throw new Error(`Backend returned HTTP ${response.status}`);
   return (await response.json()) as T;

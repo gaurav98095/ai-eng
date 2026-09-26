@@ -1,6 +1,7 @@
 """Redis-backed session events for browser EventSource clients."""
 
 import asyncio
+import json
 import secrets
 from typing import Annotated
 
@@ -28,9 +29,10 @@ async def mint_ticket(
     if session is None or not owns(session.owner_id, user_id):
         raise HTTPException(status_code=404, detail="session not found")
     ticket = secrets.token_urlsafe(32)
-    key = f"sse-ticket:{ticket}"
-    events.client.setex(
-        key, request.app.state.settings.sse_ticket_seconds, f"{user_id}:{session_id}"
+    await events.mint_ticket(
+        ticket,
+        f"{user_id}:{session_id}",
+        request.app.state.settings.sse_ticket_seconds,
     )
     return {
         "ticket": ticket,
@@ -44,17 +46,15 @@ async def stream_events(
     ticket: str = Query(...),
     events: RedisEvents = Depends(get_events),
 ):
-    value = events.client.get(f"sse-ticket:{ticket}")
+    value = await events.consume_ticket(ticket)
     if value != f"local-dev:{session_id}" and (
         not value or not value.endswith(f":{session_id}")
     ):
         raise HTTPException(status_code=401, detail="invalid or expired event ticket")
-    events.client.delete(f"sse-ticket:{ticket}")
-
     async def body():
         try:
             async for event in subscribe(events.url, session_id, tls=events.tls):
-                yield f"data: {event}\n\n"
+                yield f"data: {json.dumps(event, separators=(',', ':'))}\n\n"
         except asyncio.CancelledError:
             return
 

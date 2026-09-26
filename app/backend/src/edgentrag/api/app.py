@@ -52,7 +52,6 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
         )
         app.state.events = RedisEvents(
             app_settings.redis_url,
-            history_turns=app_settings.history_turns,
             tls=app_settings.redis_tls,
         )
         app.state.ingestion_queue = SQSIngestionQueue(
@@ -104,7 +103,7 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
             if app.state.embedding_provider is not None:
                 await app.state.embedding_provider.aclose()
             await app.state.database.dispose()
-            app.state.events.close()
+            await app.state.events.close()
             app.state.object_storage.close()
             app.state.ingestion_queue.close()
             app.state.chat_queue.close()

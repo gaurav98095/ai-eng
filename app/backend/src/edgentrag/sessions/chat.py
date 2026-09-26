@@ -18,21 +18,26 @@ async def enqueue_turn(
     db.add_all([question, answer])
     # A consumer must be able to read these rows as soon as SQS accepts the job.
     await db.commit()
+    payload = {
+        "session_id": session_id,
+        "message_id": answer.id,
+        "question": content,
+    }
     try:
-        await run_in_threadpool(
-            queue.enqueue_message,
-            session_id=session_id,
-            message_id=answer.id,
-            question=content,
-        )
-    except ChatQueueUnavailable:
-        # Delivery can be ambiguous after a network failure. Do not overwrite a
-        # consumer that has already claimed or completed this answer.
-        await db.execute(
-            update(Message)
-            .where(Message.id == answer.id, Message.status == "pending")
-            .values(status="failed")
-        )
-        await db.commit()
-        raise
+        await run_in_threadpool(queue.enqueue_message, **payload)
+    except ChatQueueUnavailable as first_error:
+        # A transport timeout is ambiguous: SQS may have accepted the first
+        # publish. Retrying the deterministic message is safe because workers
+        # claim the persisted answer idempotently; only two failed publishes
+        # turn the answer into an explicit terminal failure.
+        try:
+            await run_in_threadpool(queue.enqueue_message, **payload)
+        except ChatQueueUnavailable:
+            await db.execute(
+                update(Message)
+                .where(Message.id == answer.id, Message.status == "pending")
+                .values(status="failed")
+            )
+            await db.commit()
+            raise first_error
     return answer.id

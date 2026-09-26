@@ -66,7 +66,8 @@ containers talk to it through `host.docker.internal`.
 1. `POST /sessions` creates a session.
 2. `POST /sessions/{id}/uploads` creates pending `files` rows and presigned
    targets. The browser PUTs bytes directly to Floci/AWS.
-3. `POST .../uploads/{file_id}/complete` verifies object metadata and queues
+3. `POST .../uploads/{file_id}/complete` verifies object metadata, records the
+   checked object ETag, and queues
    `{session_id, file_id}`. The ingestion worker extracts Markdown/plain text,
    PDF, and Word documents into `chunks` rows; the STT worker transcribes audio
    and video into a durable transcript plus the same `chunks` rows.
@@ -148,10 +149,14 @@ prompt strings or hosted-model HTTP calls in routes, retrieval ranking, or
 queue code.
 
 Queue adapters follow the same boundary. `shared/queues.py` owns the boto3
-transport, polling, acknowledgement, visibility, and batch error handling;
+transport, single-message polling, acknowledgement, visibility heartbeats, and
+queue error handling;
 `ingestion/queue.py`, `stt/queue.py`, and `chat_queue.py` expose only the small
 domain operations their callers need. Workers validate their own versioned job
 payloads so malformed jobs can be acknowledged without coupling domains to SQS.
+Workers process one message at a time and extend its visibility while model or
+storage work is running. Local queue bootstrap and the AWS Terraform module
+create a dead-letter queue with a bounded receive count for poison messages.
 
 ## Operational logging
 
@@ -167,7 +172,8 @@ compare latency without leaking user data.
 Every API, model service, and worker calls the optional telemetry bootstrap at
 startup. The required SDKs are installed with the backend, but exporters remain
 inactive until an endpoint is configured. Set `PHOENIX_COLLECTOR_ENDPOINT`,
-`PHOENIX_PROJECT_NAME`, and `PHOENIX_API_KEY` when required by the deployment.
+`PHOENIX_BASE_URL`, `PHOENIX_PROJECT_NAME`, `PHOENIX_API_KEY`, and optional
+`PHOENIX_CLIENT_HEADERS` when required by the deployment.
 The RAG chain, query embedding, and hosted generation call emit spans with
 bounded counts and durations; prompt and answer content is excluded unless
 `EDGENTRAG_TELEMETRY_CAPTURE_CONTENT=true` is explicitly set.
@@ -176,10 +182,11 @@ For Grafana Cloud or an OpenTelemetry Collector/Alloy, set
 `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` to the OTLP HTTP logs endpoint, or set the
 generic `OTEL_EXPORTER_OTLP_ENDPOINT` and let the SDK derive `/v1/logs`.
 Authentication headers use the standard `OTEL_EXPORTER_OTLP_LOGS_HEADERS` or
-`OTEL_EXPORTER_OTLP_HEADERS` variables. Existing stderr logs remain enabled, so
-telemetry outages do not stop application requests. OpenTelemetry is the
-transport seam; Grafana/Alloy can route logs and Phoenix can receive the
-OpenInference traces independently.
+`OTEL_EXPORTER_OTLP_HEADERS` variables. `OTEL_SERVICE_NAME` may override the
+process-specific default, while `OTEL_RESOURCE_ATTRIBUTES` adds deployment
+metadata. Existing stderr logs remain enabled, so telemetry outages do not stop
+application requests. OpenTelemetry is the transport seam; Grafana/Alloy can
+route logs and Phoenix can receive the OpenInference traces independently.
 
 ## Production status
 
@@ -190,5 +197,11 @@ is an override fragment and currently inherits local values when merged with
 the base. Review `app/README.md`, `deploy/README.md`, and the checklist before
 using Terraform or any billable AWS resource.
 
-Do not expose the current synchronous search/answers endpoints to untrusted
-users until their session ownership checks are implemented.
+Production settings now require non-local PostgreSQL and TLS Redis endpoints,
+S3/queue/Cognito identifiers, HTTPS model providers, and the configured
+embedding/generation services before startup. Readiness still checks live
+database and Redis connectivity; migrations and AWS resource probes remain
+release/deployment checks rather than request-path work.
+
+The synchronous search and answers routes enforce the same session ownership
+boundary as chat and uploads.

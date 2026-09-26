@@ -264,6 +264,7 @@ def test_upload_completion_checks_s3_then_queues_once(tmp_path) -> None:
         storage.metadata_by_key[object_key] = ObjectMetadata(
             size_bytes=4096,
             content_type="text/markdown",
+            etag="etag-1",
         )
         queue.unavailable = True
         unavailable = client.post(complete_url)
@@ -304,6 +305,7 @@ def test_upload_completion_checks_s3_then_queues_once(tmp_path) -> None:
             file_record = database_session.get(SessionFile, target["file_id"])
             assert file_record is not None
             assert file_record.status == "uploaded"
+            assert file_record.object_etag == "etag-1"
     finally:
         engine.dispose()
 

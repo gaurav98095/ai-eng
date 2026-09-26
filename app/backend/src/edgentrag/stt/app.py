@@ -6,6 +6,7 @@ import hmac
 import logging
 import os
 import tempfile
+from threading import RLock
 from time import perf_counter
 from typing import Annotated
 
@@ -21,19 +22,21 @@ bearer = HTTPBearer(auto_error=False)
 settings = load_settings()
 configure("edgentrag-stt")
 _model = None
+_model_lock = RLock()
 
 
 def _load_model():
     global _model
-    if _model is None:
-        from faster_whisper import WhisperModel
+    with _model_lock:
+        if _model is None:
+            from faster_whisper import WhisperModel
 
-        device = resolve_device(settings.device)
-        _model = WhisperModel(
-            settings.model_name,
-            device=device,
-            compute_type=resolve_compute_type(settings.compute_type, device),
-        )
+            device = resolve_device(settings.device)
+            _model = WhisperModel(
+                settings.model_name,
+                device=device,
+                compute_type=resolve_compute_type(settings.compute_type, device),
+            )
     return _model
 
 
@@ -87,18 +90,19 @@ def transcribe(
                     )
                 target.write(chunk)
             target.flush()
-            segments, info = _load_model().transcribe(
-                target.name, beam_size=1, vad_filter=True
-            )
-            rows = [
-                {
-                    "start": round(s.start, 2),
-                    "end": round(s.end, 2),
-                    "text": s.text.strip(),
-                }
-                for s in segments
-                if s.text.strip()
-            ]
+            with _model_lock:
+                segments, info = _load_model().transcribe(
+                    target.name, beam_size=1, vad_filter=True
+                )
+                rows = [
+                    {
+                        "start": round(s.start, 2),
+                        "end": round(s.end, 2),
+                        "text": s.text.strip(),
+                    }
+                    for s in segments
+                    if s.text.strip()
+                ]
     except HTTPException:
         raise
     except Exception as exc:

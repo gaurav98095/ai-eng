@@ -10,6 +10,8 @@ class IngestionQueue(Protocol):
 
     def enqueue_file(self, *, session_id: str, file_id: str) -> None: ...
 
+    def ping(self) -> bool: ...
+
 
 class SQSIngestionQueue:
     """Publish stable file references through the shared SQS transport."""
@@ -21,6 +23,9 @@ class SQSIngestionQueue:
         self._queue.send(
             {"schema_version": 1, "session_id": session_id, "file_id": file_id}
         )
+
+    def ping(self) -> bool:
+        return self._queue.ping()
 
     def close(self) -> None:
         self._queue.close()

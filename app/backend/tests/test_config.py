@@ -12,6 +12,25 @@ from edgentrag.generation.settings import GenerationSettings
 from edgentrag.stt.settings import STTSettings
 
 
+def production_settings() -> dict[str, object]:
+    return {
+        "database_url": "postgresql+asyncpg://user:secret@db.example.test/app",
+        "redis_url": "rediss://redis.example.test:6379/0",
+        "s3_bucket": "private-documents",
+        "ingestion_queue_url": "https://sqs.example.test/ingestion",
+        "chat_queue_url": "https://sqs.example.test/chat",
+        "embedding_queue_url": "https://sqs.example.test/embedding",
+        "cors_allowed_origins": ["https://app.example.test"],
+        "cognito_region": "ap-south-1",
+        "cognito_user_pool_id": "ap-south-1_example",
+        "cognito_client_id": "client-id",
+        "colab_embedding_service_url": "https://embedding.example.test",
+        "embedding_api_token": "embedding-token",
+        "colab_generation_service_url": "https://generation.example.test",
+        "generation_api_token": "generation-token",
+    }
+
+
 @pytest.fixture(autouse=True)
 def isolated_settings_environment(monkeypatch):
     """Configuration tests must not depend on the developer's real settings."""
@@ -34,13 +53,13 @@ def test_yaml_configuration_is_loaded_and_environment_takes_precedence(
     monkeypatch, tmp_path: Path
 ) -> None:
     config_file = tmp_path / "config.yml"
-    config_file.write_text("history_turns: 12\nlog_level: WARNING\n")
+    config_file.write_text("queue_wait_seconds: 12\nlog_level: WARNING\n")
     monkeypatch.setenv("EDGENTRAG_CONFIG_FILE", str(config_file))
     monkeypatch.setenv("EDGENTRAG_LOG_LEVEL", "DEBUG")
 
     settings = Settings(_env_file=None)
 
-    assert settings.history_turns == 12
+    assert settings.queue_wait_seconds == 12
     assert settings.log_level == "DEBUG"
 
 
@@ -62,12 +81,7 @@ def test_production_yaml_profile_has_safe_defaults(monkeypatch) -> None:
     config_file = Path(__file__).resolve().parents[1] / "config.production.yml"
     monkeypatch.setenv("EDGENTRAG_CONFIG_FILE", str(config_file))
 
-    settings = Settings(
-        _env_file=None,
-        ingestion_queue_url="https://sqs.example.test/ingestion",
-        chat_queue_url="https://sqs.example.test/chat",
-        cors_allowed_origins=["https://app.example.test"],
-    )
+    settings = Settings(_env_file=None, **production_settings())
 
     assert settings.environment == "production"
     assert settings.redis_tls is True
@@ -76,23 +90,44 @@ def test_production_yaml_profile_has_safe_defaults(monkeypatch) -> None:
 
 
 def test_production_cors_must_be_explicit_and_non_local() -> None:
+    configured = production_settings()
+    configured["cors_allowed_origins"] = []
     with pytest.raises(ValidationError, match="requires cors_allowed_origins"):
         Settings(
             _env_file=None,
             environment="production",
-            cors_allowed_origins=[],
             aws_endpoint_url=None,
-            ingestion_queue_url="https://sqs.example.test/ingestion",
-            chat_queue_url="https://sqs.example.test/chat",
+            **configured,
         )
+    configured["cors_allowed_origins"] = ["http://localhost:5173"]
     with pytest.raises(ValidationError, match="cannot be local"):
         Settings(
             _env_file=None,
             environment="production",
-            cors_allowed_origins=["http://localhost:5173"],
             aws_endpoint_url=None,
-            ingestion_queue_url="https://sqs.example.test/ingestion",
-            chat_queue_url="https://sqs.example.test/chat",
+            **configured,
+        )
+
+
+def test_production_rejects_local_or_incomplete_dependencies() -> None:
+    configured = production_settings()
+    configured["database_url"] = "postgresql://user:secret@localhost/app"
+    with pytest.raises(ValidationError, match="database_url cannot use a local host"):
+        Settings(
+            _env_file=None,
+            environment="production",
+            aws_endpoint_url=None,
+            **configured,
+        )
+
+    configured = production_settings()
+    configured["s3_bucket"] = ""
+    with pytest.raises(ValidationError, match="s3_bucket"):
+        Settings(
+            _env_file=None,
+            environment="production",
+            aws_endpoint_url=None,
+            **configured,
         )
 
 

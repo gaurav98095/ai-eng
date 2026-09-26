@@ -261,6 +261,7 @@ async def complete_upload(
             status_code=422,
             detail="uploaded file content type does not match the declared type",
         )
+    file_record.object_etag = metadata.etag
 
     if file_record.kind == "audio" and settings.stt_service_url is None:
         raise HTTPException(
