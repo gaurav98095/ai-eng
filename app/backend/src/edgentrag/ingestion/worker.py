@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from edgentrag.core.config import Settings, load_settings
 from edgentrag.core.database import Database
+from edgentrag.core.telemetry import configure
 from edgentrag.embedding.client import (
     EmbeddingBatch,
     EmbeddingProvider,
@@ -279,6 +280,7 @@ async def run_worker() -> None:
     """Poll SQS forever; failed infrastructure work remains available to retry."""
     settings = load_settings()
     logging.basicConfig(level=settings.log_level)
+    configure("edgentrag-ingestion-worker")
     database = Database(
         settings.database_url,
         pool_size=settings.db_pool_size,

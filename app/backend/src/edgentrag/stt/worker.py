@@ -12,6 +12,7 @@ from sqlalchemy import delete
 
 from edgentrag.core.config import Settings, load_settings
 from edgentrag.core.database import Database
+from edgentrag.core.telemetry import configure
 from edgentrag.embedding.client import EmbeddingProvider, HttpEmbeddingClient
 from edgentrag.ingestion.extraction import chunk_text
 from edgentrag.ingestion.models import DocumentChunk
@@ -188,6 +189,7 @@ async def run_worker() -> None:
     """Poll SQS and acknowledge only terminally handled media jobs."""
     settings = load_settings()
     logging.basicConfig(level=settings.log_level)
+    configure("edgentrag-stt-worker")
     if not settings.stt_queue_url or settings.stt_service_url is None:
         logger.info("STT queue or provider is not configured; worker is disabled")
         return

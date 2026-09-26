@@ -20,6 +20,7 @@ from edgentrag.api.routes.sessions import router as sessions_router
 from edgentrag.chat_queue import SQSChatQueue
 from edgentrag.core.config import Settings, load_settings
 from edgentrag.core.database import Database
+from edgentrag.core.telemetry import configure
 from edgentrag.embedding.client import HttpEmbeddingClient
 from edgentrag.ingestion.queue import SQSIngestionQueue
 from edgentrag.llm.client import HttpLLMClient
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 def create_app(*, settings: Settings | None = None) -> FastAPI:
     """Create the HTTP application with its routes and metadata."""
     app_settings = settings or load_settings()
+    configure("edgentrag-api")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

@@ -10,6 +10,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
+from edgentrag.core.telemetry import configure
 from edgentrag.embedding.model import SentenceTransformerEmbedder, TextEmbedder
 from edgentrag.embedding.schemas import EmbeddingBatch as EmbedResponse
 from edgentrag.embedding.schemas import validate_embedding_batch
@@ -31,6 +32,7 @@ def create_app(
     embedder: TextEmbedder | None = None,
 ) -> FastAPI:
     """Build the service with injectable settings and model for tests."""
+    configure("edgentrag-embedding")
     app_settings = settings or EmbeddingSettings()
     app_embedder = embedder or SentenceTransformerEmbedder(
         model_name=app_settings.model_name,

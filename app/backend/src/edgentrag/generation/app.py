@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from starlette.concurrency import run_in_threadpool
 
+from edgentrag.core.telemetry import configure
 from edgentrag.generation.model import (
     GenerationInputTooLarge,
     TextGenerator,
@@ -26,6 +27,7 @@ def create_app(
     settings: GenerationSettings | None = None,
     generator: TextGenerator | None = None,
 ) -> FastAPI:
+    configure("edgentrag-generation")
     configuration = settings if settings is not None else GenerationSettings()
     backend = (
         generator if generator is not None else TransformersGenerator(configuration)

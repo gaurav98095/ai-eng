@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 
 from edgentrag.core.database import Database
+from edgentrag.core.telemetry import capture_content, set_span_attributes, span
 from edgentrag.embedding.client import EmbeddingProvider, EmbeddingServiceUnavailable
 from edgentrag.ingestion.models import DocumentChunk
 from edgentrag.retrieval.schemas import SearchMatch, SearchResponse
@@ -142,7 +143,22 @@ async def search_session(
     # operator in the database; SQLite retains the bounded in-process reference
     # implementation for local development.
     embed_query = getattr(provider, "embed_query", None)
-    batch = await (embed_query(query) if embed_query else provider.embed([query]))
+    with span(
+        "retrieval.embed_query",
+        **{
+            "openinference.span.kind": "EMBEDDING",
+            "input.value": query if capture_content() else None,
+            "input.chars": len(query),
+        },
+    ) as current:
+        batch = await (embed_query(query) if embed_query else provider.embed([query]))
+        set_span_attributes(
+            current,
+            **{
+                "embedding.model_name": batch.model,
+                "embedding.dimensions": batch.dimensions,
+            },
+        )
     if len(batch.embeddings) != 1:
         raise EmbeddingServiceUnavailable("embedding service returned an invalid query")
     query_vector = unit_vector(batch.embeddings[0], batch.dimensions)

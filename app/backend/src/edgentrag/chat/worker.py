@@ -10,6 +10,7 @@ from sqlalchemy import update
 
 from edgentrag.core.config import Settings, load_settings
 from edgentrag.core.database import Database
+from edgentrag.core.telemetry import configure
 from edgentrag.embedding.client import EmbeddingProvider, HttpEmbeddingClient
 from edgentrag.llm.client import HttpLLMClient, LLMInputTooLarge, LLMProvider
 from edgentrag.llm.prompts.grounded_answer import PromptContextTooLarge
@@ -142,6 +143,7 @@ async def run_worker() -> None:
     """Poll SQS forever; failed infrastructure work remains available to retry."""
     settings = load_settings()
     logging.basicConfig(level=settings.log_level)
+    configure("edgentrag-chat-worker")
     database = Database(
         settings.database_url,
         pool_size=settings.db_pool_size,

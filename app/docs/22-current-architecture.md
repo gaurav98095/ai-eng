@@ -162,6 +162,25 @@ metadata, status, and `duration_ms`; they never log bearer tokens, prompts,
 document contents, transcripts, or media bytes. Use these bounded counters to
 compare latency without leaking user data.
 
+### Grafana and Phoenix telemetry
+
+Every API, model service, and worker calls the optional telemetry bootstrap at
+startup. Install the observability extra (`pip install -e '.[observability]'`)
+to enable Phoenix's OpenInference exporter. Set `PHOENIX_COLLECTOR_ENDPOINT`,
+`PHOENIX_PROJECT_NAME`, and `PHOENIX_API_KEY` when required by the deployment.
+The RAG chain, query embedding, and hosted generation call emit spans with
+bounded counts and durations; prompt and answer content is excluded unless
+`EDGENTRAG_TELEMETRY_CAPTURE_CONTENT=true` is explicitly set.
+
+For Grafana Cloud or an OpenTelemetry Collector/Alloy, set
+`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` to the OTLP HTTP logs endpoint, or set the
+generic `OTEL_EXPORTER_OTLP_ENDPOINT` and let the SDK derive `/v1/logs`.
+Authentication headers use the standard `OTEL_EXPORTER_OTLP_LOGS_HEADERS` or
+`OTEL_EXPORTER_OTLP_HEADERS` variables. Existing stderr logs remain enabled, so
+telemetry outages do not stop application requests. OpenTelemetry is the
+transport seam; Grafana/Alloy can route logs and Phoenix can receive the
+OpenInference traces independently.
+
 ## Production status
 
 Production is not equivalent to local Compose. The intended target is RDS,

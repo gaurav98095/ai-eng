@@ -1,6 +1,7 @@
 """Retrieve session evidence, then delegate prompt and inference to ``llm``."""
 
 from edgentrag.core.database import Database
+from edgentrag.core.telemetry import capture_content, set_span_attributes, span
 from edgentrag.embedding.client import EmbeddingProvider
 from edgentrag.llm.client import LLMProvider, LLMServiceUnavailable
 from edgentrag.llm.contracts import LLMRequest
@@ -40,13 +41,30 @@ async def answer_session(
         search.matches,
         max_prompt_chars=max_prompt_chars,
     )
-    generated = await llm_provider.generate(
-        LLMRequest(
-            instructions=GROUNDED_ANSWER_INSTRUCTIONS,
-            prompt=context.prompt,
-            max_new_tokens=max_new_tokens,
+    with span(
+        "rag.answer",
+        **{
+            "openinference.span.kind": "CHAIN",
+            "session.id": session_id,
+            "retrieval.match_count": len(search.matches),
+            "llm.input_chars": len(context.prompt),
+            "input.value": query if capture_content() else None,
+        },
+    ) as current:
+        generated = await llm_provider.generate(
+            LLMRequest(
+                instructions=GROUNDED_ANSWER_INSTRUCTIONS,
+                prompt=context.prompt,
+                max_new_tokens=max_new_tokens,
+            )
         )
-    )
+        set_span_attributes(
+            current,
+            **{
+                "output.value": generated.content if capture_content() else None,
+                "llm.output_chars": len(generated.content),
+            },
+        )
     return AnswerResponse(
         session_id=session_id,
         query=query,

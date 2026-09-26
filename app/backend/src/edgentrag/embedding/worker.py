@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from edgentrag.core.config import load_settings
 from edgentrag.core.database import Database
+from edgentrag.core.telemetry import configure
 from edgentrag.embedding.client import HttpEmbeddingClient
 from edgentrag.embedding.schemas import validate_embedding_batch
 from edgentrag.ingestion.models import DocumentChunk
@@ -109,6 +110,7 @@ async def process_message(
 async def run_worker() -> None:
     settings = load_settings()
     logging.basicConfig(level=settings.log_level)
+    configure("edgentrag-embedding-worker")
     if not settings.embedding_queue_url:
         logger.info("Embedding queue is not configured; worker is disabled")
         return
