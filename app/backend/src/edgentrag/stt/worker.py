@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from time import perf_counter
 from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -67,8 +68,9 @@ async def process_message(
     embedding_queue: SQSQueue | None = None,
 ) -> None:
     """Transcribe one media file and persist chunks before acknowledging SQS."""
+    started = perf_counter()
     try:
-        job = STTJob.model_validate(message.body)
+        job = STTJob.model_validate_json(message.body)
     except ValidationError as exc:
         raise InvalidSTTJob("message body is not a valid STT job") from exc
 
@@ -114,7 +116,12 @@ async def process_message(
             raise STTTranscriptionRejected("speech-to-text returned no transcript")
     except (ObjectTooLarge, STTTranscriptionRejected) as exc:
         await _mark_failed(database, job, job.file_id)
-        logger.warning("Media file %s failed transcription: %s", job.file_id, exc)
+        logger.warning(
+            "stt_job_failed file_id=%s reason=%s duration_ms=%.2f",
+            job.file_id,
+            exc,
+            (perf_counter() - started) * 1000,
+        )
         return
     except STTServiceUnavailable as exc:
         raise RetryableSTTJob("speech-to-text service is unavailable") from exc
@@ -168,7 +175,13 @@ async def process_message(
             )
         except QueueError as exc:
             raise RetryableSTTJob("embedding job could not be queued") from exc
-    logger.info("Transcribed media file %s into %d chunks", job.file_id, len(chunks))
+    logger.info(
+        "stt_job file_id=%s chunks=%d model=%s duration_ms=%.2f",
+        job.file_id,
+        len(chunks),
+        transcript.model,
+        (perf_counter() - started) * 1000,
+    )
 
 
 async def run_worker() -> None:

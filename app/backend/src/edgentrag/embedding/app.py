@@ -2,6 +2,7 @@
 
 import hmac
 import logging
+from time import perf_counter
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -62,6 +63,8 @@ def create_app(
         ],
     ) -> EmbedResponse:
         """Embed a batch after authenticating the caller."""
+        started = perf_counter()
+        input_chars = sum(len(text) for text in body.texts)
         expected_token = app_settings.api_token.get_secret_value()
         if not expected_token:
             raise HTTPException(
@@ -106,8 +109,22 @@ def create_app(
                 model=app_settings.model_name, dimensions=dimensions, embeddings=vectors
             )
             validate_embedding_batch(result, len(body.texts))
+            logger.info(
+                "embedding_request batch_size=%d input_chars=%d "
+                "output_dimensions=%d duration_ms=%.2f",
+                len(body.texts),
+                input_chars,
+                result.dimensions,
+                (perf_counter() - started) * 1000,
+            )
         except Exception as exc:
-            logger.exception("Embedding request failed")
+            logger.exception(
+                "Embedding request failed batch_size=%d input_chars=%d "
+                "duration_ms=%.2f",
+                len(body.texts),
+                input_chars,
+                (perf_counter() - started) * 1000,
+            )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="embedding model is temporarily unavailable",

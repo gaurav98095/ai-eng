@@ -28,7 +28,9 @@ class DocumentChunk(Base):
     __tablename__ = "chunks"
     __table_args__ = (
         UniqueConstraint(
-            "session_file_id", "chunk_index", name="uq_chunks_file_index",
+            "session_file_id",
+            "chunk_index",
+            name="uq_chunks_file_index",
         ),
         CheckConstraint(
             "chunk_index >= 0", name="ck_document_chunks_index_nonnegative"
@@ -53,9 +55,7 @@ class DocumentChunk(Base):
             # A dimensionless pgvector column permits controlled embedding-model
             # upgrades. Queries remain model-scoped; re-ingest after changing
             # the configured model so old and new vectors are never mixed.
-            JSON().with_variant(Vector(), "postgresql")
-            if Vector is not None
-            else JSON
+            JSON().with_variant(Vector(), "postgresql") if Vector is not None else JSON
         ),
         nullable=True,
     )

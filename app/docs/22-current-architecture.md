@@ -144,6 +144,21 @@ prompt module or `LLMProvider` implementation for experiments; do not put
 prompt strings or hosted-model HTTP calls in routes, retrieval ranking, or
 queue code.
 
+Queue adapters follow the same boundary. `shared/queues.py` owns the boto3
+transport, polling, acknowledgement, visibility, and batch error handling;
+`ingestion/queue.py`, `stt/queue.py`, and `chat_queue.py` expose only the small
+domain operations their callers need. Workers validate their own versioned job
+payloads so malformed jobs can be acknowledged without coupling domains to SQS.
+
+## Operational logging
+
+The API and hosted model services emit one structured, single-line summary per
+request. Workers emit one summary per completed job. Logs include the operation,
+stable session/file/message identifiers, input and output sizes or counts, model
+metadata, status, and `duration_ms`; they never log bearer tokens, prompts,
+document contents, transcripts, or media bytes. Use these bounded counters to
+compare latency without leaking user data.
+
 ## Production status
 
 Production is not equivalent to local Compose. The intended target is RDS,

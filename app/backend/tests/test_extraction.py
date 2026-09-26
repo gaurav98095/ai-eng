@@ -65,11 +65,14 @@ def test_extractor_uses_docling_for_pdf(monkeypatch) -> None:
     monkeypatch.setitem(sys.modules, "docling", docling)
     monkeypatch.setitem(sys.modules, "docling.document_converter", converter)
 
-    assert extract_text(
-        filename="report.pdf",
-        content_type="application/pdf",
-        content=b"%PDF-example",
-    ) == "# Converted PDF\n\nDocument body"
+    assert (
+        extract_text(
+            filename="report.pdf",
+            content_type="application/pdf",
+            content=b"%PDF-example",
+        )
+        == "# Converted PDF\n\nDocument body"
+    )
 
 
 def test_chunker_rejects_invalid_overlap() -> None:

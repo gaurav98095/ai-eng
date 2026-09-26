@@ -26,9 +26,7 @@ class SessionFileResponse(BaseModel):
     content_type: str
     kind: Literal["document", "audio"]
     size_bytes: int
-    status: Literal[
-        "awaiting_upload", "uploaded", "processing", "ready", "failed"
-    ]
+    status: Literal["awaiting_upload", "uploaded", "processing", "ready", "failed"]
 
 
 class SessionDetailResponse(SessionResponse):

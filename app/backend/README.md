@@ -20,8 +20,7 @@ For the current Compose/Make workflow, see
 [`app/docs/22-current-architecture.md`](../docs/22-current-architecture.md).
 Semantic search is available at `POST /sessions/{session_id}/search` after
 documents have been ingested with embeddings enabled. The old component pages
-remain useful for concepts, but commands such as `test-run.sh` are historical
-and are not present in this repository.
+remain useful for concepts; use the current architecture guide for commands.
 
 Grounded answers are available at `POST /sessions/{session_id}/answers` when a
 generation service URL and token are configured; see [Component 12](../docs/12-grounded-answers.md).

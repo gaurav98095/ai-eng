@@ -15,13 +15,13 @@ from edgentrag.core.config import Settings
 from edgentrag.core.database import Database
 from edgentrag.embedding.client import EmbeddingBatch, EmbeddingServiceUnavailable
 from edgentrag.ingestion.models import DocumentChunk
-from edgentrag.ingestion.queue import QueueMessage
 from edgentrag.ingestion.worker import (
     RetryableIngestionJob,
     _embed_chunks,
     process_message,
 )
 from edgentrag.sessions.models import ChatSession, SessionFile
+from edgentrag.shared.queues import Message
 from edgentrag.storage.s3 import ObjectTooLarge
 
 
@@ -102,11 +102,13 @@ def test_worker_persists_chunks_and_marks_session_ready(tmp_path) -> None:
             await database_session.commit()
 
     asyncio.run(seed_file())
-    message = QueueMessage(
+    message = Message(
         body=json.dumps(
             {"schema_version": 1, "session_id": session_id, "file_id": file_id}
         ),
         receipt_handle="receipt-1",
+        receive_count=1,
+        queue_url="https://sqs.example.test/ingestion",
     )
     settings = Settings(
         environment="test",
@@ -211,7 +213,7 @@ def test_concurrent_completions_are_idempotent_and_update_parent(tmp_path, dupli
                 await db.commit()
             provider = BarrierProvider()
             jobs = [
-                QueueMessage(
+                Message(
                     body=json.dumps(
                         {
                             "schema_version": 1,
@@ -220,6 +222,8 @@ def test_concurrent_completions_are_idempotent_and_update_parent(tmp_path, dupli
                         }
                     ),
                     receipt_handle=file_id,
+                    receive_count=1,
+                    queue_url="https://sqs.example.test/ingestion",
                 )
                 for file_id in (["a", "a"] if duplicate else ["a", "b"])
             ]
@@ -237,7 +241,9 @@ def test_concurrent_completions_are_idempotent_and_update_parent(tmp_path, dupli
             )
             async with database.sessions() as db:
                 assert (await db.get(ChatSession, "s")).status == "ready"
-                chunks = list(await db.scalars(select(DocumentChunk)))
+                chunks = list(
+                    await db.scalars(select(DocumentChunk).order_by(DocumentChunk.id))
+                )
                 assert len(chunks) == (1 if duplicate else 2)
                 chunk_ids = [chunk.id for chunk in chunks]
             # Sequential redelivery must preserve chunk IDs as well as count.
@@ -249,7 +255,14 @@ def test_concurrent_completions_are_idempotent_and_update_parent(tmp_path, dupli
                 embedding_provider=provider,
             )
             async with database.sessions() as db:
-                assert list(await db.scalars(select(DocumentChunk.id))) == chunk_ids
+                assert (
+                    list(
+                        await db.scalars(
+                            select(DocumentChunk.id).order_by(DocumentChunk.id)
+                        )
+                    )
+                    == chunk_ids
+                )
                 await db.execute(delete(ChatSession).where(ChatSession.id == "s"))
                 await db.commit()
                 assert list(await db.scalars(select(SessionFile))) == []
@@ -308,11 +321,13 @@ def test_worker_fails_a_document_larger_than_extraction_limit(tmp_path) -> None:
             await database_session.commit()
 
     asyncio.run(seed_file())
-    message = QueueMessage(
+    message = Message(
         body=json.dumps(
             {"schema_version": 1, "session_id": session_id, "file_id": file_id}
         ),
         receipt_handle="receipt-2",
+        receive_count=1,
+        queue_url="https://sqs.example.test/ingestion",
     )
     settings = Settings(
         environment="test",

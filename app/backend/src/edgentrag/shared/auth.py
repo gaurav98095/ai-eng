@@ -20,17 +20,29 @@ def current_user(request: Request) -> str:
     if settings.environment in {"local", "test"} and not auth:
         return "local-dev"
     if not auth.startswith("Bearer "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bearer token required")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Bearer token required"
+        )
     token = auth.removeprefix("Bearer ").strip()
     if not settings.cognito_user_pool_id or not settings.cognito_client_id:
         if settings.environment in {"local", "test"}:
             return "local-dev"
-        raise HTTPException(status_code=503, detail="identity provider is not configured")
+        raise HTTPException(
+            status_code=503, detail="identity provider is not configured"
+        )
     issuer = f"https://cognito-idp.{settings.cognito_region}.amazonaws.com/{settings.cognito_user_pool_id}"
     try:
-        key = _jwks(f"{issuer}/.well-known/jwks.json").get_signing_key_from_jwt(token).key
-        claims = jwt.decode(token, key, algorithms=["RS256"], audience=settings.cognito_client_id,
-                           issuer=issuer, options={"require": ["sub", "iss", "aud", "exp"]})
+        key = (
+            _jwks(f"{issuer}/.well-known/jwks.json").get_signing_key_from_jwt(token).key
+        )
+        claims = jwt.decode(
+            token,
+            key,
+            algorithms=["RS256"],
+            audience=settings.cognito_client_id,
+            issuer=issuer,
+            options={"require": ["sub", "iss", "aud", "exp"]},
+        )
         if claims.get("token_use") != "id":
             raise ValueError("not an ID token")
         return str(claims["sub"])

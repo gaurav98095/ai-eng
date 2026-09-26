@@ -3,7 +3,7 @@
 This root selects one of two deliberately separate backends:
 
 - `local` can use the Docker provider for persistent PostgreSQL/pgvector and
-  Redis. The recommended `setup-local.sh` path uses Compose as the single
+  Redis. The recommended `scripts/setup-local.sh` path uses Compose as the single
   owner of those containers; do not run both owners on the same ports.
 - `production` uses the AWS provider for RDS PostgreSQL, ElastiCache Redis, S3,
   SQS, and Cognito. Supply an existing VPC and private subnets; credentials

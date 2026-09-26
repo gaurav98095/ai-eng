@@ -7,8 +7,6 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
 
 
 def _async_url(url: str) -> str:
@@ -20,19 +18,6 @@ def _async_url(url: str) -> str:
     return url
 
 
-def _sync_url(url: str) -> str:
-    """Normalize a deployment URL for synchronous worker sessions."""
-    if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://") :]
-    if url.startswith("postgresql+asyncpg://"):
-        return url.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
-    if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+psycopg2://", 1)
-    if url.startswith("sqlite+aiosqlite://"):
-        return url.replace("sqlite+aiosqlite://", "sqlite://", 1)
-    return url
-
-
 class Database:
     """Own one engine and session factory for one application process.
 
@@ -41,13 +26,23 @@ class Database:
     test, and gracefully dispose database resources.
     """
 
-    def __init__(self, database_url: str, *, pool_size: int = 10, max_overflow: int = 5) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        pool_size: int = 10,
+        max_overflow: int = 5,
+    ) -> None:
         database_url = _async_url(database_url)
         engine_options = {
             "pool_pre_ping": True,
         }
         if database_url.startswith("postgresql+asyncpg://"):
-            engine_options.update(pool_size=pool_size, max_overflow=max_overflow, pool_timeout=30)
+            engine_options.update(
+                pool_size=pool_size,
+                max_overflow=max_overflow,
+                pool_timeout=30,
+            )
         self._engine: AsyncEngine = create_async_engine(
             database_url,
             **engine_options,
@@ -71,22 +66,6 @@ class Database:
         """Close pooled connections during application shutdown."""
         await self._engine.dispose()
 
-
-class WorkerDatabase:
-    """Synchronous database boundary used by blocking worker processes."""
-
-    def __init__(self, database_url: str, *, pool_size: int = 10, max_overflow: int = 5) -> None:
-        url = _sync_url(database_url)
-        options: dict[str, object] = {"pool_pre_ping": True}
-        if url.startswith("postgresql+"):
-            options.update(pool_size=pool_size, max_overflow=max_overflow, pool_timeout=30)
-        self.engine = create_engine(url, **options)
-        if self.engine.dialect.name == "sqlite":
-            event.listen(self.engine, "connect", _configure_sqlite)
-        self.sessions = sessionmaker(self.engine, class_=Session, expire_on_commit=False)
-
-    def close(self) -> None:
-        self.engine.dispose()
 
 def _enable_sqlite_foreign_keys(connection, _record) -> None:
     """SQLite otherwise silently ignores foreign keys and delete cascades."""

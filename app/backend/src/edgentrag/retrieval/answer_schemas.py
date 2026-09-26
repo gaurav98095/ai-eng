@@ -32,4 +32,3 @@ class AnswerResponse(BaseModel):
     input_tokens: int = Field(ge=1)
     output_tokens: int = Field(ge=1)
     sources: list[AnswerSource]
-

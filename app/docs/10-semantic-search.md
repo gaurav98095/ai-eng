@@ -2,8 +2,8 @@
 
 > **Historical v2 walkthrough.** Search now reads `chunks` from the current
 > schema and filters compatible model vectors. Follow
-> [the current runbook](22-current-architecture.md) for startup; `test-run.sh`
-> and the old table names below are historical.
+> [the current runbook](22-current-architecture.md) for startup; the old table
+> names below are historical.
 
 Component 9 persisted an embedding for each chunk. Now we use those vectors to
 find source text related to a question. The result is ranked evidence; generating

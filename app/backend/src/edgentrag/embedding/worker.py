@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from time import perf_counter
 from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -32,9 +33,12 @@ class InvalidEmbeddingJob(Exception):
     """Poison queue payload that should be acknowledged and discarded."""
 
 
-async def process_message(database: Database, message: Message, *, batch_size: int) -> None:
+async def process_message(
+    database: Database, message: Message, *, batch_size: int
+) -> None:
+    started = perf_counter()
     try:
-        job = EmbeddingJob.model_validate(message.body)
+        job = EmbeddingJob.model_validate_json(message.body)
     except ValidationError as exc:
         raise InvalidEmbeddingJob("invalid embedding job") from exc
 
@@ -50,7 +54,11 @@ async def process_message(database: Database, message: Message, *, batch_size: i
         async with database.sessions() as db:
             session = await db.get(ChatSession, job.session_id)
             file_record = await db.get(SessionFile, job.file_id)
-            if session is None or file_record is None or file_record.session_id != job.session_id:
+            if (
+                session is None
+                or file_record is None
+                or file_record.session_id != job.session_id
+            ):
                 raise InvalidEmbeddingJob("embedding job does not match stored records")
             rows = list(
                 (
@@ -87,7 +95,13 @@ async def process_message(database: Database, message: Message, *, batch_size: i
             file_record.status = "ready"
             await _update_session_status(db, session_id=job.session_id)
             await db.commit()
-            logger.info("Embedded file %s (%d chunks)", job.file_id, len(rows))
+            logger.info(
+                "embedding_job file_id=%s chunks=%d model=%s duration_ms=%.2f",
+                job.file_id,
+                len(rows),
+                model_name,
+                (perf_counter() - started) * 1000,
+            )
     finally:
         await provider.aclose()
 
@@ -113,21 +127,29 @@ async def run_worker() -> None:
     try:
         while True:
             try:
-                messages = await asyncio.to_thread(queue.receive, max_messages=settings.queue_batch_size)
+                messages = await asyncio.to_thread(
+                    queue.receive, max_messages=settings.queue_batch_size
+                )
             except QueueError:
                 logger.exception("Embedding queue unavailable")
                 await asyncio.sleep(2)
                 continue
             for message in messages:
                 try:
-                    await process_message(database, message, batch_size=settings.embedding_batch_size)
+                    await process_message(
+                        database, message, batch_size=settings.embedding_batch_size
+                    )
                 except InvalidEmbeddingJob:
                     logger.exception("Discarding invalid embedding message")
                 except RuntimeError:
-                    logger.exception("Embedding configuration/provider failed; leaving job for retry")
+                    logger.exception(
+                        "Embedding configuration/provider failed; leaving job for retry"
+                    )
                     continue
                 except ValueError:
-                    logger.exception("Embedding response invalid; leaving job for retry")
+                    logger.exception(
+                        "Embedding response invalid; leaving job for retry"
+                    )
                     continue
                 except Exception:
                     logger.exception("Embedding failed; leaving job for retry")

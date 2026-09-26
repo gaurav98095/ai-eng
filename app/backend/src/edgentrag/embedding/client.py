@@ -65,7 +65,9 @@ class HttpEmbeddingClient:
             return batch
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code != 404:
-                raise EmbeddingServiceUnavailable("query embedding request failed") from exc
+                raise EmbeddingServiceUnavailable(
+                    "query embedding request failed"
+                ) from exc
             return await self.embed([text])
         except (httpx.HTTPError, ValueError) as exc:
             raise EmbeddingServiceUnavailable("query embedding request failed") from exc

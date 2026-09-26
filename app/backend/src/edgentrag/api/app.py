@@ -4,7 +4,9 @@ Keep startup wiring here. Route handlers live in dedicated modules so that
 features can grow without turning this file into an untestable dependency hub.
 """
 
+import logging
 from contextlib import asynccontextmanager
+from time import perf_counter
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +27,8 @@ from edgentrag.shared.events import RedisEvents
 from edgentrag.shared.queues import SQSQueue
 from edgentrag.storage.s3 import S3ObjectStorage
 from edgentrag.stt.queue import SQSSTTQueue
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(*, settings: Settings | None = None) -> FastAPI:
@@ -50,14 +54,22 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
             tls=app_settings.redis_tls,
         )
         app.state.ingestion_queue = SQSIngestionQueue(
-            queue_url=app_settings.ingestion_queue_url,
-            region=app_settings.aws_region,
-            endpoint_url=app_settings.aws_endpoint_url,
+            SQSQueue(
+                queue_url=app_settings.ingestion_queue_url,
+                region=app_settings.aws_region,
+                endpoint_url=app_settings.aws_endpoint_url,
+                visibility_timeout=app_settings.queue_visibility_timeout_seconds,
+                wait_seconds=app_settings.queue_wait_seconds,
+            )
         )
         app.state.chat_queue = SQSChatQueue(
-            queue_url=app_settings.chat_queue_url,
-            region=app_settings.aws_region,
-            endpoint_url=app_settings.aws_endpoint_url,
+            SQSQueue(
+                queue_url=app_settings.chat_queue_url,
+                region=app_settings.aws_region,
+                endpoint_url=app_settings.aws_endpoint_url,
+                visibility_timeout=app_settings.queue_visibility_timeout_seconds,
+                wait_seconds=app_settings.queue_wait_seconds,
+            )
         )
         app.state.stt_queue = SQSSTTQueue(
             SQSQueue(
@@ -102,6 +114,29 @@ def create_app(*, settings: Settings | None = None) -> FastAPI:
         description="API for uploading material and asking grounded questions.",
         lifespan=lifespan,
     )
+
+    @app.middleware("http")
+    async def log_request(request, call_next):
+        started = perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            logger.exception(
+                "api_request method=%s path=%s status=error duration_ms=%.2f",
+                request.method,
+                request.url.path,
+                (perf_counter() - started) * 1000,
+            )
+            raise
+        logger.info(
+            "api_request method=%s path=%s status=%d duration_ms=%.2f",
+            request.method,
+            request.url.path,
+            response.status_code,
+            (perf_counter() - started) * 1000,
+        )
+        return response
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[

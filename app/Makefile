@@ -3,20 +3,20 @@
 COMPOSE = docker compose --profile local -f compose.yaml
 
 infra-local:
-	./setup-local.sh
+	./scripts/setup-local.sh
 
 infra-prod:
-	./setup-prod.sh
+	./scripts/setup-prod.sh
 
 infra-prod-plan:
 	TFVARS_FILE=$${TFVARS_FILE:-terraform/prod.tfvars} terraform -chdir=terraform init
 	terraform -chdir=terraform plan -var-file=$${TFVARS_FILE:-prod.tfvars}
 
 destroy-local:
-	./destroy-local.sh
+	./scripts/destroy-local.sh
 
 destroy-prod:
-	./destroy-prod.sh
+	./scripts/destroy-prod.sh
 
 migrate-local:
 	$(COMPOSE) exec -T api alembic upgrade head

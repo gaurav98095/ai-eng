@@ -2,8 +2,8 @@
 
 > **Historical v2 walkthrough.** Current ingestion publishes identifiers to the
 > dedicated embedding queue and the Compose embedding worker writes vectors.
-> Use [the current runbook](22-current-architecture.md); `test-run.sh` and the
-> old `document_chunks` workflow are not current commands.
+> Use [the current runbook](22-current-architecture.md); the old
+> `document_chunks` workflow is not a current command.
 
 Component 8 created a standalone Colab API. This component teaches the local
 ingestion worker to call that API after text extraction and save each returned

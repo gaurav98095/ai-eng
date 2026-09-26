@@ -2,6 +2,11 @@ old/
 .venv/
 __pycache__/
 *.py[cod]
+*.db
+*.tsbuildinfo
+.DS_Store
+app/frontend/vite.config.js
+app/frontend/vite.config.d.ts
 __pycache__/
 .vscode/
 .env

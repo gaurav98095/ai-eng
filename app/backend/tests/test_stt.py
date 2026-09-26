@@ -1,6 +1,7 @@
 """End-to-end persistence tests for the speech-to-text queue worker."""
 
 import asyncio
+import json
 from pathlib import Path
 
 from alembic import command
@@ -71,7 +72,9 @@ def test_stt_worker_persists_transcript_and_searchable_chunks(tmp_path) -> None:
 
     asyncio.run(seed())
     message = Message(
-        body={"schema_version": 1, "session_id": "session-1", "file_id": "audio-1"},
+        body=json.dumps(
+            {"schema_version": 1, "session_id": "session-1", "file_id": "audio-1"}
+        ),
         receipt_handle="receipt-1",
         receive_count=1,
         queue_url="https://sqs.example.test/stt",

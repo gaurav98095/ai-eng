@@ -57,9 +57,7 @@ def test_generation_client_sanitizes_http_and_payload_failures(response):
     )
     try:
         expected_error = (
-            LLMInputTooLarge
-            if response.status_code == 413
-            else LLMServiceUnavailable
+            LLMInputTooLarge if response.status_code == 413 else LLMServiceUnavailable
         )
         with pytest.raises(expected_error) as error:
             asyncio.run(client.generate(LLMRequest(prompt="question")))

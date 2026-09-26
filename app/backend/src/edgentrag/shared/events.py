@@ -33,7 +33,9 @@ class RedisEvents:
 
     def publish(self, session_id: str, event: str, payload: dict[str, Any]) -> None:
         try:
-            self.client.publish(f"events:{session_id}", json.dumps({"event": event, **payload}))
+            self.client.publish(
+                f"events:{session_id}", json.dumps({"event": event, **payload})
+            )
         except Exception:
             pass
 

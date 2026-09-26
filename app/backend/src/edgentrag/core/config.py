@@ -53,9 +53,7 @@ class YamlConfigSettingsSource(PydanticBaseSettingsSource):
         super().__init__(settings_cls)
         self.config_file = config_file
 
-    def get_field_value(
-        self, field: Any, field_name: str
-    ) -> tuple[None, str, bool]:
+    def get_field_value(self, field: Any, field_name: str) -> tuple[None, str, bool]:
         """YAML is read as one mapping in ``__call__``."""
         return None, field_name, False
 
@@ -84,9 +82,7 @@ class MappedYamlConfigSettingsSource(PydanticBaseSettingsSource):
         super().__init__(settings_cls)
         self.key_map = key_map
 
-    def get_field_value(
-        self, field: Any, field_name: str
-    ) -> tuple[None, str, bool]:
+    def get_field_value(self, field: Any, field_name: str) -> tuple[None, str, bool]:
         return None, field_name, False
 
     def __call__(self) -> dict[str, Any]:
@@ -136,7 +132,9 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # Local Compose and production both use PostgreSQL; the database boundary
     # normalizes driver details while tests may override this with SQLite.
-    database_url: str = "postgresql+asyncpg://edgentrag:edgentrag@localhost:5432/edgentrag"
+    database_url: str = (
+        "postgresql+asyncpg://edgentrag:edgentrag@localhost:5432/edgentrag"
+    )
     db_pool_size: int = Field(default=10, ge=1, le=100)
     db_max_overflow: int = Field(default=5, ge=0, le=100)
     redis_url: str = "redis://localhost:6379/0"
@@ -187,9 +185,7 @@ class Settings(BaseSettings):
     def validate_model_configuration(self) -> "Settings":
         """Resolve selected hosts and require their URL/token pairs."""
         if self.environment == "production" and self.database_url.startswith("sqlite"):
-            raise ValueError(
-                "production requires a PostgreSQL database_url"
-            )
+            raise ValueError("production requires a PostgreSQL database_url")
         if self.environment == "production" and self.aws_endpoint_url:
             raise ValueError(
                 "aws_endpoint_url is only valid for local Floci development"

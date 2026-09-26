@@ -6,6 +6,7 @@ import hmac
 import logging
 import os
 import tempfile
+from time import perf_counter
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile, status
@@ -56,6 +57,7 @@ def transcribe(
     file: Annotated[UploadFile, File(...)],
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
 ) -> dict[str, object]:
+    started = perf_counter()
     expected = settings.api_token.get_secret_value()
     if not expected:
         raise HTTPException(
@@ -98,12 +100,28 @@ def transcribe(
         raise
     except Exception as exc:
         logger.exception(
-            "STT request failed for session %s file %s", session_id, file_id
+            "STT request failed session_id=%s file_id=%s input_bytes=%d "
+            "duration_ms=%.2f",
+            session_id,
+            file_id,
+            size,
+            (perf_counter() - started) * 1000,
         )
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
             "speech-to-text model is temporarily unavailable",
         ) from exc
+    logger.info(
+        "stt_request session_id=%s file_id=%s input_bytes=%d segments=%d "
+        "output_chars=%d model=%s duration_ms=%.2f",
+        session_id,
+        file_id,
+        size,
+        len(rows),
+        sum(len(row["text"]) for row in rows),
+        settings.model_name,
+        (perf_counter() - started) * 1000,
+    )
     return {
         "session_id": session_id,
         "file_id": file_id,

@@ -21,7 +21,7 @@ For Lightning AI:
    [lightning_model_services.ipynb](../lightning_model_services.ipynb).
 3. Enter the absolute repository root when prompted. The setup installs the
    embedding, STT, and generation dependency extras. Alternatively run
-   `bash app/setup-lightning-model-services.sh` from the repository root.
+   `bash app/scripts/setup-lightning-model-services.sh` from the repository root.
 4. In the setup cell (or script prompts), supply `EDGENTRAG_EMBEDDING_API_TOKEN`,
    `EDGENTRAG_STT_API_TOKEN`, and `EDGENTRAG_GENERATION_API_TOKEN` through the notebook kernel's environment
    or the hidden prompts. Shell exports in another terminal do not necessarily

@@ -2,12 +2,12 @@
 
 import asyncio
 import logging
+from time import perf_counter
 from typing import Literal
 
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import update
 
-from edgentrag.chat_queue import ChatQueueMessage, ChatQueueUnavailable, SQSChatQueue
 from edgentrag.core.config import Settings, load_settings
 from edgentrag.core.database import Database
 from edgentrag.embedding.client import EmbeddingProvider, HttpEmbeddingClient
@@ -18,6 +18,8 @@ from edgentrag.retrieval.service import SearchLimitExceeded, SearchNotReady
 from edgentrag.sessions.models import ChatSession, Message
 from edgentrag.sessions.state import lock_session
 from edgentrag.shared.events import RedisEvents
+from edgentrag.shared.queues import Message as QueueMessage
+from edgentrag.shared.queues import QueueError, SQSQueue
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +43,7 @@ class RetryableChatJob(Exception):
 
 async def process_message(
     database: Database,
-    message: ChatQueueMessage,
+    message: QueueMessage,
     *,
     settings: Settings,
     embedding_provider: EmbeddingProvider | None,
@@ -49,6 +51,7 @@ async def process_message(
     events: RedisEvents | None = None,
 ) -> None:
     """Process one chat job and leave transient failures available for retry."""
+    started = perf_counter()
     try:
         job = ChatJob.model_validate_json(message.body)
     except ValidationError as exc:
@@ -124,6 +127,15 @@ async def process_message(
             "chat.completed",
             {"message_id": job.message_id, "status": "done"},
         )
+    logger.info(
+        "chat_job session_id=%s message_id=%s input_chars=%d "
+        "output_chars=%d duration_ms=%.2f",
+        job.session_id,
+        job.message_id,
+        len(job.question),
+        len(result.answer),
+        (perf_counter() - started) * 1000,
+    )
 
 
 async def run_worker() -> None:
@@ -135,10 +147,12 @@ async def run_worker() -> None:
         pool_size=settings.db_pool_size,
         max_overflow=settings.db_max_overflow,
     )
-    queue = SQSChatQueue(
+    queue = SQSQueue(
         queue_url=settings.chat_queue_url,
         region=settings.aws_region,
         endpoint_url=settings.aws_endpoint_url,
+        visibility_timeout=settings.queue_visibility_timeout_seconds,
+        wait_seconds=settings.queue_wait_seconds,
     )
     events = RedisEvents(
         settings.redis_url, history_turns=settings.history_turns, tls=settings.redis_tls
@@ -165,12 +179,10 @@ async def run_worker() -> None:
         while True:
             try:
                 messages = await asyncio.to_thread(
-                    queue.receive_messages,
+                    queue.receive,
                     max_messages=settings.queue_batch_size,
-                    wait_time_seconds=settings.queue_wait_seconds,
-                    visibility_timeout_seconds=settings.queue_visibility_timeout_seconds,
                 )
-            except ChatQueueUnavailable:
+            except QueueError:
                 logger.exception("Could not poll the chat queue; retrying soon")
                 await asyncio.sleep(2)
                 continue
@@ -193,10 +205,8 @@ async def run_worker() -> None:
                     logger.exception("Chat answer failed; leaving job for retry")
                     continue
                 try:
-                    await asyncio.to_thread(
-                        queue.delete_message, receipt_handle=message.receipt_handle
-                    )
-                except ChatQueueUnavailable:
+                    await asyncio.to_thread(queue.delete, message)
+                except QueueError:
                     logger.exception(
                         "Could not acknowledge chat job; it may be redelivered"
                     )

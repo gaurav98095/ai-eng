@@ -2,6 +2,7 @@
 
 import hmac
 import logging
+from time import perf_counter
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -47,6 +48,8 @@ def create_app(
             HTTPAuthorizationCredentials | None, Depends(bearer_scheme)
         ],
     ) -> LLMResponse:
+        started = perf_counter()
+        input_chars = len(body.instructions) + len(body.prompt)
         expected = configuration.api_token.get_secret_value()
         if not expected:
             raise HTTPException(
@@ -61,11 +64,28 @@ def create_app(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         try:
-            return await run_in_threadpool(backend.generate, body)
+            result = await run_in_threadpool(backend.generate, body)
+            logger.info(
+                "generation_request input_chars=%d max_new_tokens=%d model=%s "
+                "input_tokens=%d output_tokens=%d duration_ms=%.2f",
+                input_chars,
+                body.max_new_tokens,
+                result.model,
+                result.input_tokens,
+                result.output_tokens,
+                (perf_counter() - started) * 1000,
+            )
+            return result
         except GenerationInputTooLarge as exc:
             raise HTTPException(413, str(exc)) from exc
         except Exception as exc:
-            logger.exception("Generation request failed")
+            logger.exception(
+                "Generation request failed input_chars=%d max_new_tokens=%d "
+                "duration_ms=%.2f",
+                input_chars,
+                body.max_new_tokens,
+                (perf_counter() - started) * 1000,
+            )
             raise HTTPException(
                 503, "generation model is temporarily unavailable"
             ) from exc

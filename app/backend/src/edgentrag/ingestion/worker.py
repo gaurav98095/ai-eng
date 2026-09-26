@@ -2,10 +2,12 @@
 
 import asyncio
 import logging
+from time import perf_counter
 from typing import Literal
+from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import BaseModel, Field, ValidationError
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edgentrag.core.config import Settings, load_settings
@@ -23,14 +25,9 @@ from edgentrag.ingestion.extraction import (
     extract_text,
 )
 from edgentrag.ingestion.models import DocumentChunk
-from edgentrag.ingestion.queue import (
-    QueueMessage,
-    QueueUnavailable,
-    SQSIngestionQueue,
-)
 from edgentrag.sessions.models import ChatSession, SessionFile
 from edgentrag.sessions.state import lock_session
-from edgentrag.shared.queues import QueueError, SQSQueue
+from edgentrag.shared.queues import Message, QueueError, SQSQueue
 from edgentrag.storage.s3 import (
     ObjectStorage,
     ObjectTooLarge,
@@ -39,6 +36,11 @@ from edgentrag.storage.s3 import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _chunk_id(file_id: str, chunk_index: int) -> str:
+    """Return a stable identifier so redelivery never duplicates a chunk."""
+    return str(uuid5(NAMESPACE_URL, f"edgentrag:chunk:{file_id}:{chunk_index}"))
 
 
 class IngestionJob(BaseModel):
@@ -117,13 +119,14 @@ async def _embed_chunks(
 async def process_message(
     database: Database,
     storage: ObjectStorage,
-    message: QueueMessage,
+    message: Message,
     *,
     settings: Settings,
     embedding_provider: EmbeddingProvider | None = None,
     embedding_queue: SQSQueue | None = None,
 ) -> None:
     """Process one message; retryable infrastructure errors propagate."""
+    started = perf_counter()
     try:
         job = IngestionJob.model_validate_json(message.body)
     except ValidationError as exc:
@@ -178,7 +181,9 @@ async def process_message(
             logger.warning("File %s failed validation: %s", job.file_id, exc)
             return
 
-        asynchronous_embedding = embedding_queue is not None and bool(settings.embedding_queue_url)
+        asynchronous_embedding = embedding_queue is not None and bool(
+            settings.embedding_queue_url
+        )
         if asynchronous_embedding:
             embeddings, embedding_model = [None for _ in chunks], None
         else:
@@ -192,19 +197,56 @@ async def process_message(
         await database_session.refresh(file_record)
         if file_record.status in {"ready", "failed"}:
             return
-        await database_session.execute(
-            delete(DocumentChunk).where(DocumentChunk.session_file_id == job.file_id)
-        )
-        database_session.add_all(
-            DocumentChunk(
-                session_file_id=job.file_id,
-                chunk_index=chunk_index,
-                content=chunk,
-                embedding=embeddings[chunk_index],
-                embedding_model=embedding_model,
+        if not asynchronous_embedding and file_record.chunk_count == len(chunks):
+            # A redelivered job can observe a stale lifecycle status after a
+            # concurrent completion on SQLite. Existing complete chunks make
+            # replacing their generated IDs unnecessary and preserve
+            # at-least-once idempotency.
+            existing_chunks = await database_session.scalar(
+                select(func.count())
+                .select_from(DocumentChunk)
+                .where(DocumentChunk.session_file_id == job.file_id)
             )
-            for chunk_index, chunk in enumerate(chunks)
+            if existing_chunks == len(chunks):
+                file_record.status = "ready"
+                await _update_session_status(
+                    database_session,
+                    session_id=job.session_id,
+                )
+                await database_session.commit()
+                return
+        existing_rows = list(
+            (
+                await database_session.scalars(
+                    select(DocumentChunk)
+                    .where(DocumentChunk.session_file_id == job.file_id)
+                    .order_by(DocumentChunk.chunk_index)
+                )
+            ).all()
         )
+        for chunk_index, chunk in enumerate(chunks):
+            if chunk_index < len(existing_rows):
+                row = existing_rows[chunk_index]
+                row.content = chunk
+                row.embedding = embeddings[chunk_index]
+                row.embedding_model = embedding_model
+            else:
+                database_session.add(
+                    DocumentChunk(
+                        id=_chunk_id(job.file_id, chunk_index),
+                        session_file_id=job.file_id,
+                        chunk_index=chunk_index,
+                        content=chunk,
+                        embedding=embeddings[chunk_index],
+                        embedding_model=embedding_model,
+                    )
+                )
+        if len(existing_rows) > len(chunks):
+            await database_session.execute(
+                delete(DocumentChunk).where(
+                    DocumentChunk.id.in_(row.id for row in existing_rows[len(chunks) :])
+                )
+            )
         file_record.chunk_count = len(chunks)
         if not asynchronous_embedding:
             file_record.status = "ready"
@@ -221,12 +263,15 @@ async def process_message(
                     },
                 )
             except QueueError as exc:
-                raise RetryableIngestionJob("embedding job could not be queued") from exc
+                raise RetryableIngestionJob(
+                    "embedding job could not be queued"
+                ) from exc
         logger.info(
-            "Prepared file %s into %d text chunks%s",
+            "ingestion_job file_id=%s chunks=%d embedding=%s duration_ms=%.2f",
             job.file_id,
             len(chunks),
-            "; queued embedding" if asynchronous_embedding else "",
+            "queued" if asynchronous_embedding else "inline",
+            (perf_counter() - started) * 1000,
         )
 
 
@@ -244,10 +289,12 @@ async def run_worker() -> None:
         region=settings.aws_region,
         endpoint_url=settings.aws_endpoint_url,
     )
-    queue = SQSIngestionQueue(
+    queue = SQSQueue(
         queue_url=settings.ingestion_queue_url,
         region=settings.aws_region,
         endpoint_url=settings.aws_endpoint_url,
+        visibility_timeout=settings.queue_visibility_timeout_seconds,
+        wait_seconds=settings.queue_wait_seconds,
     )
     embedding_queue = (
         SQSQueue(
@@ -272,12 +319,10 @@ async def run_worker() -> None:
         while True:
             try:
                 messages = await asyncio.to_thread(
-                    queue.receive_messages,
+                    queue.receive,
                     max_messages=settings.queue_batch_size,
-                    wait_time_seconds=settings.queue_wait_seconds,
-                    visibility_timeout_seconds=settings.queue_visibility_timeout_seconds,
                 )
-            except QueueUnavailable:
+            except QueueError:
                 logger.exception("Could not poll the ingestion queue; retrying soon")
                 await asyncio.sleep(2)
                 continue
@@ -306,10 +351,10 @@ async def run_worker() -> None:
 
                 try:
                     await asyncio.to_thread(
-                        queue.delete_message,
-                        receipt_handle=message.receipt_handle,
+                        queue.delete,
+                        message,
                     )
-                except QueueUnavailable:
+                except QueueError:
                     logger.exception("Could not acknowledge job; it may be redelivered")
     finally:
         await database.dispose()

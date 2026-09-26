@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE=(docker compose --profile local -f "$ROOT_DIR/compose.yaml")
 command -v docker >/dev/null || { echo "docker is required" >&2; exit 1; }
 if ! curl -fsS --max-time 3 http://localhost:4566/_floci/health >/dev/null; then

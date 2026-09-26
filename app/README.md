@@ -9,7 +9,7 @@ and several reliability issues remain; see [current limitations](#current-limita
 
 ## What works today
 
-- Create document sessions and upload UTF-8 Markdown (`.md`) or plain text (`.txt`).
+- Create document sessions and upload text, PDF, Word, audio, and video files.
 - Upload directly to object storage using presigned URLs.
 - Extract overlapping text chunks and index model embeddings.
 - Search a session using cosine similarity with PostgreSQL/pgvector.
@@ -17,10 +17,9 @@ and several reliability issues remain; see [current limitations](#current-limita
 - View upload and chat state in a React workspace, using polling and event updates.
 - Run embedding and generation services separately on Colab or Lightning AI.
 
-PDFs, images, and audio transcription are not supported by the current upload
-flow. The queue-based STT worker remains a skeleton, while the hosted
-`edgentrag.stt.app` service provides authenticated `/transcribe` inference for
-the Colab and Lightning model-service notebooks.
+Images, spreadsheets, and presentations remain deferred. Audio and video use
+the queue-based STT worker and require the hosted authenticated
+`edgentrag.stt.app` `/transcribe` service from the Colab or Lightning notebooks.
 
 ## How the pieces fit together
 
@@ -227,8 +226,8 @@ Ordinary backend tests use fake model providers; downloading model weights is
 not required. Install the `embedding` and `generation` extras only where you
 intend to run real model inference.
 
-The current backend checks are not all green: SQLite migration compatibility and
-lint violations remain. A collection error such as `No module named redis`
+The backend test suite and Ruff checks are expected to be green in a configured
+development environment. A collection error such as `No module named redis`
 indicates the development environment needs the current backend dependencies.
 
 ## Production
@@ -246,7 +245,7 @@ The existing tooling is incomplete:
 
 - `make infra-prod-plan` plans infrastructure; `make infra-prod` applies Terraform
   and pushes backend images, but does not complete an ECS rollout or frontend deployment.
-- `setup-prod.sh` applies infrastructure before all deployment prerequisites are
+- `scripts/setup-prod.sh` applies infrastructure before all deployment prerequisites are
   checked. Review it before running: it can create billable resources.
 - `compose.production.yaml` is not currently a safe production override. Merging
   it with the local base retains local infrastructure values, test AWS credentials,
@@ -266,14 +265,15 @@ not a unified deployment pipeline.
 - Worker claims lack crash-recovery leases; chat can remain stuck in `answering`.
 - Synchronous search and answers routes still need session ownership checks
   before multi-user production exposure.
-- Generic queue parsing/acknowledgment and partial-batch failure handling need hardening.
+- Queue payload validation belongs to each worker; the shared SQS transport owns
+  polling, acknowledgements, and partial-batch error reporting.
 - Redis operations in async routes and SSE reconnect/cleanup behavior need work.
 - A failed upload batch can leave unconfirmed files blocking session readiness;
   use distinct filenames and small test batches while experimenting.
 - Browser-side presigned URL rewriting is unsafe with strict host-signature validation.
 - Prompt packing uses characters rather than the model's complete token budget.
-- SQLite migration `0006` is incompatible with the current test database path.
-- STT validates queue jobs but cannot transcribe or persist transcripts.
+- STT requires a configured hosted provider, but its worker persists transcripts
+  and searchable chunks when that provider is available.
 - The frontend does not currently render the answer's structured source metadata.
 
 These are known gaps, not features promised by the deployment scaffolding.
@@ -290,7 +290,8 @@ app/
 ├── terraform/             Local/AWS infrastructure scaffolding
 ├── deploy/                AWS reference templates and checklist
 ├── compose.yaml           Local application stack; no Floci service
-└── Makefile               Setup, migration, and teardown entry points
+├── Makefile               Setup, migration, and teardown entry points
+└── scripts/               Local, production, and model-service shell entry points
 ```
 
 Read the [current architecture and operating guide](docs/22-current-architecture.md)
