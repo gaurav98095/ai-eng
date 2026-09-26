@@ -99,6 +99,9 @@ safe for multi-user production use.
   variables override YAML for deployment-specific settings.
 - `core/config.py` owns typed loading, source precedence, and production
   validation.
+- `cors_allowed_origins` is a committed local list and must be replaced with
+  deployed frontend origins through `EDGENTRAG_CORS_ALLOWED_ORIGINS` in
+  production; local origins are rejected by production validation.
 - Terraform/deployment templates own production resource identifiers, but are
   scaffolding and do not yet perform a complete rollout.
 

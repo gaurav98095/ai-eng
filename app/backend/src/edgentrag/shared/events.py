@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from redis import Redis
 from redis.asyncio import Redis as AsyncRedis
+
+logger = logging.getLogger(__name__)
 
 
 class RedisEvents:
@@ -28,16 +31,25 @@ class RedisEvents:
             self.client.rpush(key, json.dumps({"role": role, "content": content}))
             self.client.ltrim(key, -(self.history_turns * 2), -1)
             self.client.expire(key, 86400)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "redis_event_failed operation=append_history session_id=%s error=%s",
+                session_id,
+                type(exc).__name__,
+            )
 
     def publish(self, session_id: str, event: str, payload: dict[str, Any]) -> None:
         try:
             self.client.publish(
                 f"events:{session_id}", json.dumps({"event": event, **payload})
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "redis_event_failed operation=publish session_id=%s event=%s error=%s",
+                session_id,
+                event,
+                type(exc).__name__,
+            )
 
     def close(self) -> None:
         self.client.close()

@@ -8,6 +8,9 @@ log_level: INFO
 db_pool_size: 10
 db_max_overflow: 5
 redis_tls: false
+cors_allowed_origins:
+  - http://localhost:5173
+  - http://127.0.0.1:5173
 history_turns: 8
 aws_region: ap-south-1
 aws_endpoint_url: http://localhost:4566

@@ -41,7 +41,6 @@ async def mint_ticket(
 @router.get("/{session_id}/events")
 async def stream_events(
     session_id: str,
-    request: Request,
     ticket: str = Query(...),
     events: RedisEvents = Depends(get_events),
 ):

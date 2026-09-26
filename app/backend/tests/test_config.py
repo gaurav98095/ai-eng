@@ -66,12 +66,34 @@ def test_production_yaml_profile_has_safe_defaults(monkeypatch) -> None:
         _env_file=None,
         ingestion_queue_url="https://sqs.example.test/ingestion",
         chat_queue_url="https://sqs.example.test/chat",
+        cors_allowed_origins=["https://app.example.test"],
     )
 
     assert settings.environment == "production"
     assert settings.redis_tls is True
     assert settings.aws_endpoint_url is None
     assert settings.db_pool_size == 20
+
+
+def test_production_cors_must_be_explicit_and_non_local() -> None:
+    with pytest.raises(ValidationError, match="requires cors_allowed_origins"):
+        Settings(
+            _env_file=None,
+            environment="production",
+            cors_allowed_origins=[],
+            aws_endpoint_url=None,
+            ingestion_queue_url="https://sqs.example.test/ingestion",
+            chat_queue_url="https://sqs.example.test/chat",
+        )
+    with pytest.raises(ValidationError, match="cannot be local"):
+        Settings(
+            _env_file=None,
+            environment="production",
+            cors_allowed_origins=["http://localhost:5173"],
+            aws_endpoint_url=None,
+            ingestion_queue_url="https://sqs.example.test/ingestion",
+            chat_queue_url="https://sqs.example.test/chat",
+        )
 
 
 def test_yaml_configuration_rejects_unknown_keys(monkeypatch, tmp_path: Path) -> None:

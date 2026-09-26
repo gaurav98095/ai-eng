@@ -66,7 +66,15 @@ def search_setup(tmp_path):
     command.upgrade(config, "head")
     engine = create_engine(f"sqlite:///{database_path}")
     with Session(engine) as session:
-        session.add_all([ChatSession(id=name) for name in ("mine", "other", "empty")])
+        session.add_all(
+            [
+                ChatSession(
+                    id=name,
+                    owner_id="local-dev" if name != "other" else "other-user",
+                )
+                for name in ("mine", "other", "empty")
+            ]
+        )
         for file_id, owner, state in (
             ("file-a", "mine", "ready"),
             ("file-b", "other", "ready"),
@@ -174,6 +182,21 @@ def test_missing_and_empty_sessions_do_not_call_colab(search_setup):
         == 409
     )
     assert provider.calls == []
+
+
+def test_search_and_answers_require_session_ownership(search_setup):
+    client, provider, _, _, generation = search_setup
+
+    assert (
+        client.post("/sessions/other/search", json={"query": "question"}).status_code
+        == 404
+    )
+    assert (
+        client.post("/sessions/other/answers", json={"query": "question"}).status_code
+        == 404
+    )
+    assert provider.calls == []
+    assert generation.calls == []
 
 
 def test_unavailable_or_unconfigured_provider_returns_sanitized_503(search_setup):

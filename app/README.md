@@ -212,6 +212,9 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/pytest app/backend/tests
 git diff --check
 ```
 
+The same backend, frontend, and shell checks run in GitHub Actions for every
+push and pull request (`.github/workflows/ci.yml`).
+
 For frontend development outside Docker:
 
 ```sh

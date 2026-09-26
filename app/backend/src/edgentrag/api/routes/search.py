@@ -3,9 +3,11 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from edgentrag.api.dependencies import (
     get_database,
+    get_db_session,
     get_embedding_provider,
     get_settings,
 )
@@ -19,6 +21,8 @@ from edgentrag.retrieval.service import (
     SessionNotFound,
     search_session,
 )
+from edgentrag.sessions.models import ChatSession
+from edgentrag.shared.auth import current_user, owns
 
 router = APIRouter(prefix="/sessions", tags=["search"])
 
@@ -27,11 +31,16 @@ router = APIRouter(prefix="/sessions", tags=["search"])
 async def search(
     session_id: str,
     body: SearchRequest,
+    database_session: Annotated[AsyncSession, Depends(get_db_session)],
     database: Annotated[Database, Depends(get_database)],
     provider: Annotated[EmbeddingProvider | None, Depends(get_embedding_provider)],
     settings: Annotated[Settings, Depends(get_settings)],
+    user_id: Annotated[str, Depends(current_user)],
 ) -> SearchResponse:
     """Return source chunks ordered by similarity to the query."""
+    session = await database_session.get(ChatSession, session_id)
+    if session is None or not owns(session.owner_id, user_id):
+        raise HTTPException(status_code=404, detail="session not found")
     try:
         return await search_session(
             database,

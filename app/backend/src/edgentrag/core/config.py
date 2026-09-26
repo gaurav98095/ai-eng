@@ -139,6 +139,7 @@ class Settings(BaseSettings):
     db_max_overflow: int = Field(default=5, ge=0, le=100)
     redis_url: str = "redis://localhost:6379/0"
     redis_tls: bool = False
+    cors_allowed_origins: list[str] = []
     history_turns: int = Field(default=8, ge=1, le=50)
     aws_region: str = "ap-south-1"
     aws_endpoint_url: str | None = None
@@ -191,6 +192,13 @@ class Settings(BaseSettings):
                 "aws_endpoint_url is only valid for local Floci development"
             )
         if self.environment == "production":
+            if not self.cors_allowed_origins:
+                raise ValueError("production requires cors_allowed_origins")
+            if any(
+                "localhost" in origin or "127.0.0.1" in origin
+                for origin in self.cors_allowed_origins
+            ):
+                raise ValueError("production CORS origins cannot be local addresses")
             required_queues = {
                 "ingestion_queue_url": self.ingestion_queue_url,
                 "chat_queue_url": self.chat_queue_url,
